@@ -29,8 +29,8 @@ export const create = mutation({
     source: v.string(),
     channelNumber: v.optional(v.number()),
     mixerId: v.optional(v.id("mixers")),
-    stageboxPortId: v.optional(v.id("stageboxPorts")),
-    stageboxPortIdRight: v.optional(v.id("stageboxPorts")),
+    ioPortId: v.optional(v.id("ioPorts")),
+    ioPortIdRight: v.optional(v.id("ioPorts")),
     uhf: v.optional(v.string()),
     micInputDev: v.optional(v.string()),
     patched: v.optional(v.boolean()),
@@ -61,8 +61,8 @@ export const create = mutation({
       channelNumber: args.channelNumber ?? maxChannel + 1,
       source: args.source,
       mixerId: args.mixerId,
-      stageboxPortId: args.stageboxPortId,
-      stageboxPortIdRight: args.stageboxPortIdRight,
+      ioPortId: args.ioPortId,
+      ioPortIdRight: args.ioPortIdRight,
       uhf: args.uhf,
       micInputDev: args.micInputDev,
       patched: args.patched ?? false,
@@ -82,8 +82,8 @@ export const update = mutation({
     source: v.optional(v.string()),
     channelNumber: v.optional(v.number()),
     mixerId: v.optional(v.id("mixers")),
-    stageboxPortId: v.optional(v.id("stageboxPorts")),
-    stageboxPortIdRight: v.optional(v.id("stageboxPorts")),
+    ioPortId: v.optional(v.id("ioPorts")),
+    ioPortIdRight: v.optional(v.id("ioPorts")),
     uhf: v.optional(v.string()),
     micInputDev: v.optional(v.string()),
     patched: v.optional(v.boolean()),
@@ -187,6 +187,50 @@ export const swapOrder = mutation({
 
     await ctx.db.patch(args.channelId1, data2);
     await ctx.db.patch(args.channelId2, data1);
+  },
+});
+
+// Generate empty channels up to a target count
+export const generateChannelsUpTo = mutation({
+  args: {
+    projectId: v.id("projects"),
+    targetCount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existingChannels = await ctx.db
+      .query("inputChannels")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+
+    const currentCount = existingChannels.length;
+
+    // If we already have enough channels, do nothing
+    if (currentCount >= args.targetCount) {
+      return { added: 0, total: currentCount };
+    }
+
+    // Find max order and channelNumber
+    const maxOrder = existingChannels.length > 0
+      ? Math.max(...existingChannels.map(c => c.order))
+      : 0;
+    const maxChannelNumber = existingChannels.length > 0
+      ? Math.max(...existingChannels.map(c => c.channelNumber))
+      : 0;
+
+    const channelsToAdd = args.targetCount - currentCount;
+
+    // Insert empty channels
+    for (let i = 0; i < channelsToAdd; i++) {
+      await ctx.db.insert("inputChannels", {
+        projectId: args.projectId,
+        order: maxOrder + i + 1,
+        channelNumber: maxChannelNumber + i + 1,
+        source: "",
+        patched: false,
+      });
+    }
+
+    return { added: channelsToAdd, total: args.targetCount };
   },
 });
 

@@ -22,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Plus, MoreVertical, ChevronUp, ChevronDown, Trash2, Check } from "lucide-react";
-import type { InputChannel, StageboxPort } from "@/types/convex";
+import type { InputChannel, IOPort } from "@/types/convex";
 
 interface InputChannelTableProps {
   projectId: Id<"projects">;
@@ -52,7 +52,7 @@ function incrementTrailingNumber(value: string): string {
 
 export function InputChannelTable({ projectId }: InputChannelTableProps) {
   const channels = useQuery(api.inputChannels.list, { projectId }) as InputChannel[] | undefined;
-  const stageboxPorts = useQuery(api.stageboxes.listAllPorts, { projectId }) as StageboxPort[] | undefined;
+  const ioPorts = useQuery(api.ioDevices.listAllPorts, { projectId }) as IOPort[] | undefined;
 
   const createChannel = useMutation(api.inputChannels.create);
   const updateChannel = useMutation(api.inputChannels.update);
@@ -62,7 +62,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const inputPorts = stageboxPorts?.filter((p) => p.type === "input") ?? [];
+  const inputPorts = ioPorts?.filter((p) => p.type === "input") ?? [];
 
   // Use local state for navigation instead of hook to avoid duplicate handlers
   const [activeCell, setActiveCell] = useState<{ rowIndex: number; columnId: string } | null>(null);
@@ -343,7 +343,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
   const getPortColor = (portId: string | undefined) => {
     if (!portId) return undefined;
     const port = inputPorts.find((p) => p._id === portId);
-    return port?.stageboxColor;
+    return port?.ioDeviceColor;
   };
 
   const isCellActive = (rowIndex: number, columnId: string) => {
@@ -415,15 +415,15 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
                     {channel.channelNumber}
                   </TableCell>
                   <TableCell>
-                    {channel.stageboxPortId ? (
+                    {channel.ioPortId ? (
                       <Badge
                         variant="outline"
                         style={{
-                          borderColor: getPortColor(channel.stageboxPortId),
-                          color: getPortColor(channel.stageboxPortId),
+                          borderColor: getPortColor(channel.ioPortId),
+                          color: getPortColor(channel.ioPortId),
                         }}
                       >
-                        {getPortLabel(channel.stageboxPortId)}
+                        {getPortLabel(channel.ioPortId)}
                       </Badge>
                     ) : (
                       <span className="text-muted-foreground">-</span>

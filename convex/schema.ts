@@ -32,8 +32,8 @@ export default defineSchema({
     designation: v.string(), // A, B, C
   }).index("by_project", ["projectId"]),
 
-  // Stageboxes
-  stageboxes: defineTable({
+  // IO Devices (stageboxes, computers, etc.)
+  ioDevices: defineTable({
     projectId: v.id("projects"),
     name: v.string(),
     shortName: v.string(), // for port prefix
@@ -43,15 +43,15 @@ export default defineSchema({
     position: v.optional(v.object({ x: v.number(), y: v.number() })),
   }).index("by_project", ["projectId"]),
 
-  // Stagebox-Ports
-  stageboxPorts: defineTable({
-    stageboxId: v.id("stageboxes"),
+  // IO Ports
+  ioPorts: defineTable({
+    ioDeviceId: v.id("ioDevices"),
     type: v.union(v.literal("input"), v.literal("output")),
     portNumber: v.number(),
     label: v.string(), // e.g. "IOX-D-I1"
   })
-    .index("by_stagebox", ["stageboxId"])
-    .index("by_stagebox_and_type", ["stageboxId", "type"]),
+    .index("by_ioDevice", ["ioDeviceId"])
+    .index("by_ioDevice_and_type", ["ioDeviceId", "type"]),
 
   // Groups (for channel grouping)
   groups: defineTable({
@@ -67,9 +67,9 @@ export default defineSchema({
     order: v.number(),
     mixerId: v.optional(v.id("mixers")),
     channelNumber: v.number(),
-    stageboxPortId: v.optional(v.id("stageboxPorts")),
+    ioPortId: v.optional(v.id("ioPorts")),
     // For True Stereo: second port
-    stageboxPortIdRight: v.optional(v.id("stageboxPorts")),
+    ioPortIdRight: v.optional(v.id("ioPorts")),
     source: v.string(),
     uhf: v.optional(v.string()),
     micInputDev: v.optional(v.string()),
@@ -90,7 +90,7 @@ export default defineSchema({
     order: v.number(),
     mixerId: v.optional(v.id("mixers")),
     busName: v.string(),
-    stageboxPortId: v.optional(v.id("stageboxPorts")),
+    ioPortId: v.optional(v.id("ioPorts")),
     destination: v.string(),
     ampProcessor: v.optional(v.string()),
     location: v.optional(v.string()),
@@ -107,7 +107,7 @@ export default defineSchema({
     type: v.union(
       v.literal("project"),
       v.literal("input_group"),
-      v.literal("stagebox")
+      v.literal("io_device")
     ),
     data: v.string(), // JSON stringified
   })

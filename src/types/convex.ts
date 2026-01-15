@@ -23,7 +23,7 @@ export interface Mixer {
   designation: string;
 }
 
-export interface Stagebox {
+export interface IODevice {
   _id: string;
   _creationTime: number;
   projectId: string;
@@ -35,15 +35,15 @@ export interface Stagebox {
   position?: { x: number; y: number };
 }
 
-export interface StageboxPort {
+export interface IOPort {
   _id: string;
   _creationTime: number;
-  stageboxId: string;
+  ioDeviceId: string;
   type: "input" | "output";
   portNumber: number;
   label: string;
-  stageboxName?: string;
-  stageboxColor?: string;
+  ioDeviceName?: string;
+  ioDeviceColor?: string;
 }
 
 export interface InputChannel {
@@ -53,8 +53,8 @@ export interface InputChannel {
   order: number;
   mixerId?: string;
   channelNumber: number;
-  stageboxPortId?: string;
-  stageboxPortIdRight?: string;
+  ioPortId?: string;
+  ioPortIdRight?: string;
   source: string;
   uhf?: string;
   micInputDev?: string;
@@ -73,7 +73,7 @@ export interface OutputChannel {
   order: number;
   mixerId?: string;
   busName: string;
-  stageboxPortId?: string;
+  ioPortId?: string;
   destination: string;
   ampProcessor?: string;
   location?: string;

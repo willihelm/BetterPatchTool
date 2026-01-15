@@ -8,10 +8,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Settings, Download, Users } from "lucide-react";
+import { ArrowLeft, Download, Users } from "lucide-react";
 import { InputChannelTable } from "@/components/project/input-channel-table";
 import { OutputChannelTable } from "@/components/project/output-channel-table";
-import { StageboxOverview } from "@/components/project/stagebox-overview";
+import { IOOverview } from "@/components/project/io-overview";
+import { MixerSettingsDialog } from "@/components/project/mixer-settings-dialog";
 import type { Project, Mixer } from "@/types/convex";
 
 export default function ProjectPage() {
@@ -20,6 +21,7 @@ export default function ProjectPage() {
 
   const project = useQuery(api.projects.get, { projectId }) as Project | null | undefined;
   const mixers = useQuery(api.mixers.list, { projectId }) as Mixer[] | undefined;
+  const channels = useQuery(api.inputChannels.list, { projectId });
 
   if (project === undefined) {
     return (
@@ -82,9 +84,13 @@ export default function ProjectPage() {
               <Button variant="ghost" size="icon">
                 <Download className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon">
-                <Settings className="h-4 w-4" />
-              </Button>
+              {currentMixer && (
+                <MixerSettingsDialog
+                  projectId={projectId}
+                  mixer={currentMixer}
+                  currentChannelCount={channels?.length ?? 0}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -96,7 +102,7 @@ export default function ProjectPage() {
           <TabsList className="mb-4">
             <TabsTrigger value="inputs">Input Patch List</TabsTrigger>
             <TabsTrigger value="outputs">Output Patch List</TabsTrigger>
-            <TabsTrigger value="stageboxes">Stageboxes</TabsTrigger>
+            <TabsTrigger value="io-devices">IO Devices</TabsTrigger>
           </TabsList>
 
           <TabsContent value="inputs" className="mt-0">
@@ -107,8 +113,8 @@ export default function ProjectPage() {
             <OutputChannelTable projectId={projectId} />
           </TabsContent>
 
-          <TabsContent value="stageboxes" className="mt-0">
-            <StageboxOverview projectId={projectId} />
+          <TabsContent value="io-devices" className="mt-0">
+            <IOOverview projectId={projectId} />
           </TabsContent>
         </Tabs>
       </main>

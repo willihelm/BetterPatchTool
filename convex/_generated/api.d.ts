@@ -10,10 +10,10 @@
 
 import type * as blockPresets from "../blockPresets.js";
 import type * as inputChannels from "../inputChannels.js";
+import type * as ioDevices from "../ioDevices.js";
 import type * as mixers from "../mixers.js";
 import type * as outputChannels from "../outputChannels.js";
 import type * as projects from "../projects.js";
-import type * as stageboxes from "../stageboxes.js";
 
 import type {
   ApiFromModules,
@@ -24,10 +24,10 @@ import type {
 declare const fullApi: ApiFromModules<{
   blockPresets: typeof blockPresets;
   inputChannels: typeof inputChannels;
+  ioDevices: typeof ioDevices;
   mixers: typeof mixers;
   outputChannels: typeof outputChannels;
   projects: typeof projects;
-  stageboxes: typeof stageboxes;
 }>;
 
 /**

@@ -22,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Plus, MoreVertical, ChevronUp, ChevronDown, Trash2 } from "lucide-react";
-import type { OutputChannel, StageboxPort } from "@/types/convex";
+import type { OutputChannel, IOPort } from "@/types/convex";
 import { useKeyboardNavigation } from "@/components/table/hooks/useKeyboardNavigation";
 
 interface OutputChannelTableProps {
@@ -52,7 +52,7 @@ function incrementTrailingNumber(value: string): string {
 
 export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
   const channels = useQuery(api.outputChannels.list, { projectId }) as OutputChannel[] | undefined;
-  const stageboxPorts = useQuery(api.stageboxes.listAllPorts, { projectId }) as StageboxPort[] | undefined;
+  const ioPorts = useQuery(api.ioDevices.listAllPorts, { projectId }) as IOPort[] | undefined;
 
   const createChannel = useMutation(api.outputChannels.create);
   const updateChannel = useMutation(api.outputChannels.update);
@@ -63,7 +63,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
   const [pendingValue, setPendingValue] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const outputPorts = stageboxPorts?.filter((p) => p.type === "output") ?? [];
+  const outputPorts = ioPorts?.filter((p) => p.type === "output") ?? [];
 
   const {
     activeCell,
@@ -329,7 +329,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
   const getPortColor = (portId: string | undefined) => {
     if (!portId) return undefined;
     const port = outputPorts.find((p) => p._id === portId);
-    return port?.stageboxColor;
+    return port?.ioDeviceColor;
   };
 
   const isCellActive = (rowIndex: number, columnId: string) => {
@@ -399,15 +399,15 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
                     {rowIndex + 1}
                   </TableCell>
                   <TableCell>
-                    {channel.stageboxPortId ? (
+                    {channel.ioPortId ? (
                       <Badge
                         variant="outline"
                         style={{
-                          borderColor: getPortColor(channel.stageboxPortId),
-                          color: getPortColor(channel.stageboxPortId),
+                          borderColor: getPortColor(channel.ioPortId),
+                          color: getPortColor(channel.ioPortId),
                         }}
                       >
-                        {getPortLabel(channel.stageboxPortId)}
+                        {getPortLabel(channel.ioPortId)}
                       </Badge>
                     ) : (
                       <span className="text-muted-foreground">-</span>
