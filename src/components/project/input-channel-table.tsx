@@ -219,7 +219,10 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
         e.preventDefault();
         if (e.altKey) {
           const channel = channels?.[rowIndex];
-          if (channel) moveChannel({ channelId: channel._id, direction: "up" });
+          if (channel && rowIndex > 0) {
+            moveChannel({ channelId: channel._id, direction: "up" });
+            selectCell({ rowIndex: rowIndex - 1, columnId });
+          }
         } else {
           selectCell({ rowIndex: Math.max(0, rowIndex - 1), columnId });
         }
@@ -228,7 +231,10 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
         e.preventDefault();
         if (e.altKey) {
           const channel = channels?.[rowIndex];
-          if (channel) moveChannel({ channelId: channel._id, direction: "down" });
+          if (channel && rowIndex < (channels?.length ?? 1) - 1) {
+            moveChannel({ channelId: channel._id, direction: "down" });
+            selectCell({ rowIndex: rowIndex + 1, columnId });
+          }
         } else {
           selectCell({ rowIndex: Math.min((channels?.length ?? 1) - 1, rowIndex + 1), columnId });
         }
