@@ -29,9 +29,11 @@ export const create = mutation({
     venue: v.optional(v.string()),
     ownerId: v.string(),
     channelCount: v.optional(v.number()),
+    outputChannelCount: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const channelCount = args.channelCount ?? 48;
+    const outputChannelCount = args.outputChannelCount ?? 24;
 
     const projectId = await ctx.db.insert("projects", {
       title: args.title,
@@ -59,6 +61,16 @@ export const create = mutation({
         channelNumber: i + 1,
         source: "",
         patched: false,
+      });
+    }
+
+    // Generate initial empty output channels
+    for (let i = 0; i < outputChannelCount; i++) {
+      await ctx.db.insert("outputChannels", {
+        projectId,
+        order: i + 1,
+        busName: "",
+        destination: "",
       });
     }
 

@@ -91,6 +91,46 @@ export const remove = mutation({
   },
 });
 
+// Generate empty output channels up to a target count
+export const generateChannelsUpTo = mutation({
+  args: {
+    projectId: v.id("projects"),
+    targetCount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existingChannels = await ctx.db
+      .query("outputChannels")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+
+    const currentCount = existingChannels.length;
+
+    // If we already have enough channels, do nothing
+    if (currentCount >= args.targetCount) {
+      return { added: 0, total: currentCount };
+    }
+
+    // Find max order
+    const maxOrder = existingChannels.length > 0
+      ? Math.max(...existingChannels.map(c => c.order))
+      : 0;
+
+    const channelsToAdd = args.targetCount - currentCount;
+
+    // Insert empty output channels
+    for (let i = 0; i < channelsToAdd; i++) {
+      await ctx.db.insert("outputChannels", {
+        projectId: args.projectId,
+        order: maxOrder + i + 1,
+        busName: "",
+        destination: "",
+      });
+    }
+
+    return { added: channelsToAdd, total: args.targetCount };
+  },
+});
+
 // Output-Kanal verschieben
 export const moveChannel = mutation({
   args: {

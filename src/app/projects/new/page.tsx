@@ -27,6 +27,8 @@ export default function NewProjectPage() {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
   const [venue, setVenue] = useState("");
+  const [channelCount, setChannelCount] = useState("48");
+  const [outputChannelCount, setOutputChannelCount] = useState("24");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,6 +43,8 @@ export default function NewProjectPage() {
         date: date || undefined,
         venue: venue.trim() || undefined,
         ownerId: DEMO_USER_ID,
+        channelCount: parseInt(channelCount) || 48,
+        outputChannelCount: parseInt(outputChannelCount) || 24,
       });
       router.push(`/project/${projectId}`);
     } catch (error) {
@@ -103,6 +107,36 @@ export default function NewProjectPage() {
                   onChange={(e) => setVenue(e.target.value)}
                 />
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="channelCount">Input Channels</Label>
+                  <Input
+                    id="channelCount"
+                    type="number"
+                    min="1"
+                    max="256"
+                    value={channelCount}
+                    onChange={(e) => setChannelCount(e.target.value)}
+                    placeholder="48"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="outputChannelCount">Output Channels</Label>
+                  <Input
+                    id="outputChannelCount"
+                    type="number"
+                    min="1"
+                    max="256"
+                    value={outputChannelCount}
+                    onChange={(e) => setOutputChannelCount(e.target.value)}
+                    placeholder="24"
+                  />
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground -mt-4">
+                Number of channels to create (can be changed later)
+              </p>
 
               <div className="flex gap-4 pt-4">
                 <Button type="submit" disabled={isLoading || !title.trim()}>
