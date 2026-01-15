@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Download, Users } from "lucide-react";
+import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import { InputChannelTable } from "@/components/project/input-channel-table";
 import { OutputChannelTable } from "@/components/project/output-channel-table";
 import { IOOverview } from "@/components/project/io-overview";
@@ -79,6 +80,7 @@ export default function ProjectPage() {
                   {currentMixer.name} ({currentMixer.channelCount}ch)
                 </Badge>
               )}
+              <ThemeSwitcher />
               <Button variant="ghost" size="icon">
                 <Users className="h-4 w-4" />
               </Button>

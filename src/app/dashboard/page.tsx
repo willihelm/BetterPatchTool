@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Plus, MoreVertical, Calendar, MapPin, Copy, Archive } from "lucide-react";
+import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import { formatDistanceToNow } from "@/lib/date-utils";
 import type { Project } from "@/types/convex";
 
@@ -49,12 +50,15 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold">BetterPatchTool</h1>
             <p className="text-sm text-muted-foreground">Dashboard</p>
           </div>
-          <Button asChild>
-            <Link href="/projects/new">
-              <Plus className="mr-2 h-4 w-4" />
-              New Project
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <ThemeSwitcher />
+            <Button asChild>
+              <Link href="/projects/new">
+                <Plus className="mr-2 h-4 w-4" />
+                New Project
+              </Link>
+            </Button>
+          </div>
         </div>
       </header>
 
