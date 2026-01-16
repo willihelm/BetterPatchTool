@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Plus, MoreVertical, ChevronUp, ChevronDown, Trash2, Zap, X } from "lucide-react";
 import type { OutputChannel } from "@/types/convex";
-import { useKeyboardNavigation } from "@/components/table/hooks/useKeyboardNavigation";
 import { PortSelectCell } from "./port-select-cell";
 import { useChannelSelection } from "./use-channel-selection";
 import { AutoPatchDialog } from "./auto-patch-dialog";
@@ -67,7 +66,6 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
   const patchChannel = useMutation(api.patching.patchOutputChannel);
 
   const [editValue, setEditValue] = useState("");
-  const [pendingValue, setPendingValue] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [portDropdownOpen, setPortDropdownOpen] = useState<number | null>(null);
   const [autoPatchDialogOpen, setAutoPatchDialogOpen] = useState(false);
@@ -76,45 +74,41 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
   const channelIds = channels?.map((c) => c._id) ?? [];
   const selection = useChannelSelection({ channelIds });
 
-  const {
-    activeCell,
-    isEditing,
-    containerRef,
-    selectCell,
-    stopEditing,
-    setIsEditing,
-    setActiveCell,
-    initializeNavigation,
-  } = useKeyboardNavigation({
-    rowCount: channels?.length ?? 0,
-    columnIds: ALL_COLUMNS,
-    onStartEditing: (position) => {
-      // Don't start text editing for port column
-      if (position.columnId === "port") return;
-      const channel = channels?.[position.rowIndex];
-      if (channel) {
-        const value = channel[position.columnId as keyof OutputChannel];
-        setEditValue(typeof value === "string" ? value : "");
-        if (pendingValue !== null) {
-          setEditValue(pendingValue);
-          setPendingValue(null);
-        }
-      }
-    },
-    onMoveRow: (rowIndex, direction) => {
-      const channel = channels?.[rowIndex];
-      if (channel) {
-        moveChannel({ channelId: channel._id, direction });
-      }
-    },
-  });
+  // Use local state for navigation instead of hook to avoid duplicate handlers
+  const [activeCell, setActiveCell] = useState<{ rowIndex: number; columnId: string } | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [shouldSelectAll, setShouldSelectAll] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  const selectCell = useCallback((position: { rowIndex: number; columnId: string }) => {
+    setActiveCell(position);
+    setIsEditing(false);
+  }, []);
+
+  const stopEditing = useCallback((save = true) => {
+    setIsEditing(false);
+  }, []);
+
+  const initializeNavigation = useCallback(() => {
+    if (!activeCell && channels && channels.length > 0 && ALL_COLUMNS.length > 0) {
+      setActiveCell({ rowIndex: 0, columnId: ALL_COLUMNS[0] });
+    }
+  }, [activeCell, channels]);
+
+  // Focus on input when editing starts
   useEffect(() => {
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
-      inputRef.current.select();
+      if (shouldSelectAll) {
+        inputRef.current.select();
+      } else {
+        // Move cursor to end when typing initiated editing
+        const len = inputRef.current.value.length;
+        inputRef.current.setSelectionRange(len, len);
+      }
+      setShouldSelectAll(false);
     }
-  }, [isEditing]);
+  }, [isEditing, shouldSelectAll]);
 
   const handleAddChannel = async () => {
     await createChannel({
@@ -139,8 +133,10 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
+      e.stopPropagation();
       saveEdit();
       stopEditing(true);
+      // Navigate to next row (same column)
       if (activeCell && channels) {
         const nextRowIndex = Math.min(channels.length - 1, activeCell.rowIndex + 1);
         selectCell({ rowIndex: nextRowIndex, columnId: activeCell.columnId });
@@ -148,6 +144,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
       containerRef.current?.focus();
     } else if (e.key === "Tab") {
       e.preventDefault();
+      e.stopPropagation();
       saveEdit();
       stopEditing(true);
       if (activeCell) {
@@ -168,10 +165,12 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
       containerRef.current?.focus();
     } else if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
       stopEditing(false);
       containerRef.current?.focus();
     } else if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
+      e.stopPropagation();
       saveEdit();
       stopEditing(true);
       if (activeCell) {
@@ -207,6 +206,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
     if (channel) {
       const value = channel[columnId as keyof OutputChannel];
       setEditValue(typeof value === "string" ? value : "");
+      setShouldSelectAll(true); // Select all when clicking to edit
       setIsEditing(true);
     }
   };
@@ -301,6 +301,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
           if (channel) {
             const value = channel[columnId as keyof OutputChannel];
             setEditValue(typeof value === "string" ? value : "");
+            setShouldSelectAll(true);
             setIsEditing(true);
           }
         }
@@ -316,6 +317,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
           if (channel) {
             const value = channel[columnId as keyof OutputChannel];
             setEditValue(typeof value === "string" ? value : "");
+            setShouldSelectAll(true); // Select all when using Enter/F2
             setIsEditing(true);
           }
         }
@@ -350,8 +352,8 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
         // Alphanumeric input starts editing (only for text columns)
         if (!isPortColumn && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
-          setPendingValue(e.key);
           setEditValue(e.key);
+          setShouldSelectAll(false); // Don't select - keep the typed character
           setIsEditing(true);
         }
         break;
