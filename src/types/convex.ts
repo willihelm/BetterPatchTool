@@ -33,6 +33,8 @@ export interface IODevice {
   inputCount: number;
   outputCount: number;
   position?: { x: number; y: number };
+  deviceType?: "stagebox" | "generic";
+  portsPerRow?: number;
 }
 
 export interface IOPort {

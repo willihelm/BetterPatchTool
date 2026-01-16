@@ -23,7 +23,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Box, ArrowRight, ArrowLeft } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, Trash2, Box, ArrowRight, ArrowLeft, Eye, Grid3X3, List } from "lucide-react";
+import Link from "next/link";
 import type { IODevice } from "@/types/convex";
 
 interface IOOverviewProps {
@@ -53,6 +61,8 @@ export function IOOverview({ projectId }: IOOverviewProps) {
     color: PRESET_COLORS[0],
     inputCount: 32,
     outputCount: 16,
+    deviceType: "stagebox" as "stagebox" | "generic",
+    portsPerRow: 12,
   });
 
   const handleCreate = async () => {
@@ -65,6 +75,8 @@ export function IOOverview({ projectId }: IOOverviewProps) {
       color: newIODevice.color,
       inputCount: newIODevice.inputCount,
       outputCount: newIODevice.outputCount,
+      deviceType: newIODevice.deviceType,
+      portsPerRow: newIODevice.deviceType === "stagebox" ? newIODevice.portsPerRow : undefined,
     });
 
     setNewIODevice({
@@ -73,6 +85,8 @@ export function IOOverview({ projectId }: IOOverviewProps) {
       color: PRESET_COLORS[(PRESET_COLORS.indexOf(newIODevice.color) + 1) % PRESET_COLORS.length],
       inputCount: 32,
       outputCount: 16,
+      deviceType: "stagebox",
+      portsPerRow: 12,
     });
     setIsDialogOpen(false);
   };
@@ -132,6 +146,58 @@ export function IOOverview({ projectId }: IOOverviewProps) {
                   Ports will be named as {newIODevice.shortName || "XX"}-I1, {newIODevice.shortName || "XX"}-O1, etc.
                 </p>
               </div>
+              <div className="space-y-2">
+                <Label>Device Type</Label>
+                <Select
+                  value={newIODevice.deviceType}
+                  onValueChange={(value: "stagebox" | "generic") =>
+                    setNewIODevice({ ...newIODevice, deviceType: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="stagebox">
+                      <div className="flex items-center gap-2">
+                        <Grid3X3 className="h-4 w-4" />
+                        <span>Stagebox</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="generic">
+                      <div className="flex items-center gap-2">
+                        <List className="h-4 w-4" />
+                        <span>Generic (List only)</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {newIODevice.deviceType === "stagebox"
+                    ? "Shows in the Stageboxes tab with horizontal grid layout"
+                    : "Only shows in IO Devices list view"}
+                </p>
+              </div>
+              {newIODevice.deviceType === "stagebox" && (
+                <div className="space-y-2">
+                  <Label htmlFor="io-portsPerRow">Ports per Row</Label>
+                  <Select
+                    value={newIODevice.portsPerRow.toString()}
+                    onValueChange={(value) =>
+                      setNewIODevice({ ...newIODevice, portsPerRow: parseInt(value) })
+                    }
+                  >
+                    <SelectTrigger id="io-portsPerRow">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="8">8 ports</SelectItem>
+                      <SelectItem value="12">12 ports</SelectItem>
+                      <SelectItem value="16">16 ports</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Color</Label>
                 <div className="flex gap-2 flex-wrap">
@@ -237,9 +303,20 @@ export function IOOverview({ projectId }: IOOverviewProps) {
                 </div>
                 <div className="flex gap-2">
                   <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    asChild
+                  >
+                    <Link href={`/project/${projectId}/io/${ioDevice._id}`}>
+                      <Eye className="mr-2 h-4 w-4" />
+                      View Ports
+                    </Link>
+                  </Button>
+                  <Button
                     variant="destructive"
                     size="sm"
-                    className="w-full"
+                    className="flex-1"
                     onClick={() => removeIODevice({ ioDeviceId: ioDevice._id })}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />

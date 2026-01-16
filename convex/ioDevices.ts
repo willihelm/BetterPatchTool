@@ -12,6 +12,37 @@ export const list = query({
   },
 });
 
+// Get all IO devices with their ports for a project
+export const listWithPorts = query({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, args) => {
+    const ioDevices = await ctx.db
+      .query("ioDevices")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+
+    const result = [];
+    for (const device of ioDevices) {
+      const ports = await ctx.db
+        .query("ioPorts")
+        .withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", device._id))
+        .collect();
+
+      result.push({
+        ...device,
+        inputPorts: ports
+          .filter((p) => p.type === "input")
+          .sort((a, b) => a.portNumber - b.portNumber),
+        outputPorts: ports
+          .filter((p) => p.type === "output")
+          .sort((a, b) => a.portNumber - b.portNumber),
+      });
+    }
+
+    return result;
+  },
+});
+
 // Get IO device with ports
 export const getWithPorts = query({
   args: { ioDeviceId: v.id("ioDevices") },
@@ -71,6 +102,8 @@ export const create = mutation({
     inputCount: v.number(),
     outputCount: v.number(),
     position: v.optional(v.object({ x: v.number(), y: v.number() })),
+    deviceType: v.optional(v.union(v.literal("stagebox"), v.literal("generic"))),
+    portsPerRow: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const ioDeviceId = await ctx.db.insert("ioDevices", {
@@ -81,6 +114,8 @@ export const create = mutation({
       inputCount: args.inputCount,
       outputCount: args.outputCount,
       position: args.position,
+      deviceType: args.deviceType ?? "stagebox",
+      portsPerRow: args.portsPerRow ?? 12,
     });
 
     // Create input ports
@@ -115,6 +150,8 @@ export const update = mutation({
     shortName: v.optional(v.string()),
     color: v.optional(v.string()),
     position: v.optional(v.object({ x: v.number(), y: v.number() })),
+    deviceType: v.optional(v.union(v.literal("stagebox"), v.literal("generic"))),
+    portsPerRow: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const { ioDeviceId, ...updates } = args;
