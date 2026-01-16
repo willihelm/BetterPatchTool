@@ -82,7 +82,8 @@ export default defineSchema({
   })
     .index("by_project", ["projectId"])
     .index("by_project_and_order", ["projectId", "order"])
-    .index("by_group", ["groupId"]),
+    .index("by_group", ["groupId"])
+    .index("by_ioPort", ["ioPortId"]),
 
   // Output Channels
   outputChannels: defineTable({
@@ -98,7 +99,8 @@ export default defineSchema({
     notes: v.optional(v.string()),
   })
     .index("by_project", ["projectId"])
-    .index("by_project_and_order", ["projectId", "order"]),
+    .index("by_project_and_order", ["projectId", "order"])
+    .index("by_ioPort", ["ioPortId"]),
 
   // Templates
   templates: defineTable({

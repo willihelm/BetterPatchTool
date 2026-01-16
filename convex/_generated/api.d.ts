@@ -13,6 +13,7 @@ import type * as inputChannels from "../inputChannels.js";
 import type * as ioDevices from "../ioDevices.js";
 import type * as mixers from "../mixers.js";
 import type * as outputChannels from "../outputChannels.js";
+import type * as patching from "../patching.js";
 import type * as projects from "../projects.js";
 
 import type {
@@ -27,6 +28,7 @@ declare const fullApi: ApiFromModules<{
   ioDevices: typeof ioDevices;
   mixers: typeof mixers;
   outputChannels: typeof outputChannels;
+  patching: typeof patching;
   projects: typeof projects;
 }>;
 

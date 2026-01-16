@@ -14,22 +14,24 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreVertical, ChevronUp, ChevronDown, Trash2 } from "lucide-react";
-import type { OutputChannel, IOPort } from "@/types/convex";
+import { Plus, MoreVertical, ChevronUp, ChevronDown, Trash2, Zap, X } from "lucide-react";
+import type { OutputChannel } from "@/types/convex";
 import { useKeyboardNavigation } from "@/components/table/hooks/useKeyboardNavigation";
+import { PortSelectCell } from "./port-select-cell";
+import { useChannelSelection } from "./use-channel-selection";
+import { AutoPatchDialog } from "./auto-patch-dialog";
 
 interface OutputChannelTableProps {
   projectId: Id<"projects">;
 }
 
-// Editable columns in order
+// Editable columns in order (text input cells)
 const EDITABLE_COLUMNS = [
   "busName",
   "destination",
@@ -38,6 +40,9 @@ const EDITABLE_COLUMNS = [
   "cable",
   "notes",
 ];
+
+// All navigable columns including special cells like port
+const ALL_COLUMNS = ["port", ...EDITABLE_COLUMNS];
 
 // Increment trailing number in string, e.g. "Vocal 1" -> "Vocal 2"
 function incrementTrailingNumber(value: string): string {
@@ -52,18 +57,24 @@ function incrementTrailingNumber(value: string): string {
 
 export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
   const channels = useQuery(api.outputChannels.list, { projectId }) as OutputChannel[] | undefined;
-  const ioPorts = useQuery(api.ioDevices.listAllPorts, { projectId }) as IOPort[] | undefined;
+  const portGroups = useQuery(api.patching.getAvailablePorts, { projectId, portType: "output" });
+  const portUsageMap = useQuery(api.patching.getPortUsageMap, { projectId }) ?? {};
 
   const createChannel = useMutation(api.outputChannels.create);
   const updateChannel = useMutation(api.outputChannels.update);
   const removeChannel = useMutation(api.outputChannels.remove);
   const moveChannel = useMutation(api.outputChannels.moveChannel);
+  const patchChannel = useMutation(api.patching.patchOutputChannel);
 
   const [editValue, setEditValue] = useState("");
   const [pendingValue, setPendingValue] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [portDropdownOpen, setPortDropdownOpen] = useState<number | null>(null);
+  const [autoPatchDialogOpen, setAutoPatchDialogOpen] = useState(false);
 
-  const outputPorts = ioPorts?.filter((p) => p.type === "output") ?? [];
+  // Multi-select for auto-patching
+  const channelIds = channels?.map((c) => c._id) ?? [];
+  const selection = useChannelSelection({ channelIds });
 
   const {
     activeCell,
@@ -76,8 +87,10 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
     initializeNavigation,
   } = useKeyboardNavigation({
     rowCount: channels?.length ?? 0,
-    columnIds: EDITABLE_COLUMNS,
+    columnIds: ALL_COLUMNS,
     onStartEditing: (position) => {
+      // Don't start text editing for port column
+      if (position.columnId === "port") return;
       const channel = channels?.[position.rowIndex];
       if (channel) {
         const value = channel[position.columnId as keyof OutputChannel];
@@ -138,19 +151,19 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
       saveEdit();
       stopEditing(true);
       if (activeCell) {
-        const currentColIndex = EDITABLE_COLUMNS.indexOf(activeCell.columnId);
+        const currentColIndex = ALL_COLUMNS.indexOf(activeCell.columnId);
         let nextColIndex = e.shiftKey ? currentColIndex - 1 : currentColIndex + 1;
         let nextRowIndex = activeCell.rowIndex;
 
         if (nextColIndex < 0) {
-          nextColIndex = EDITABLE_COLUMNS.length - 1;
+          nextColIndex = ALL_COLUMNS.length - 1;
           nextRowIndex = Math.max(0, nextRowIndex - 1);
-        } else if (nextColIndex >= EDITABLE_COLUMNS.length) {
+        } else if (nextColIndex >= ALL_COLUMNS.length) {
           nextColIndex = 0;
           nextRowIndex = Math.min((channels?.length ?? 1) - 1, nextRowIndex + 1);
         }
 
-        selectCell({ rowIndex: nextRowIndex, columnId: EDITABLE_COLUMNS[nextColIndex] });
+        selectCell({ rowIndex: nextRowIndex, columnId: ALL_COLUMNS[nextColIndex] });
       }
       containerRef.current?.focus();
     } else if (e.key === "Escape") {
@@ -163,7 +176,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
       stopEditing(true);
       if (activeCell) {
         const { rowIndex, columnId } = activeCell;
-        const colIndex = EDITABLE_COLUMNS.indexOf(columnId);
+        const colIndex = ALL_COLUMNS.indexOf(columnId);
         let nextRowIndex = rowIndex;
         let nextColIndex = colIndex;
 
@@ -178,10 +191,10 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
             nextColIndex = Math.max(0, colIndex - 1);
             break;
           case "ArrowRight":
-            nextColIndex = Math.min(EDITABLE_COLUMNS.length - 1, colIndex + 1);
+            nextColIndex = Math.min(ALL_COLUMNS.length - 1, colIndex + 1);
             break;
         }
-        selectCell({ rowIndex: nextRowIndex, columnId: EDITABLE_COLUMNS[nextColIndex] });
+        selectCell({ rowIndex: nextRowIndex, columnId: ALL_COLUMNS[nextColIndex] });
       }
       containerRef.current?.focus();
     }
@@ -200,16 +213,18 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
 
   const handleTableKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (isEditing) return;
+    if (portDropdownOpen !== null) return; // Port dropdown is open
 
     if (!activeCell) {
       if (channels && channels.length > 0) {
-        selectCell({ rowIndex: 0, columnId: EDITABLE_COLUMNS[0] });
+        selectCell({ rowIndex: 0, columnId: ALL_COLUMNS[0] });
       }
       return;
     }
 
     const { rowIndex, columnId } = activeCell;
-    const colIndex = EDITABLE_COLUMNS.indexOf(columnId);
+    const colIndex = ALL_COLUMNS.indexOf(columnId);
+    const isPortColumn = columnId === "port";
 
     switch (e.key) {
       case "ArrowUp":
@@ -238,11 +253,11 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
         break;
       case "ArrowLeft":
         e.preventDefault();
-        selectCell({ rowIndex, columnId: EDITABLE_COLUMNS[Math.max(0, colIndex - 1)] });
+        selectCell({ rowIndex, columnId: ALL_COLUMNS[Math.max(0, colIndex - 1)] });
         break;
       case "ArrowRight":
         e.preventDefault();
-        selectCell({ rowIndex, columnId: EDITABLE_COLUMNS[Math.min(EDITABLE_COLUMNS.length - 1, colIndex + 1)] });
+        selectCell({ rowIndex, columnId: ALL_COLUMNS[Math.min(ALL_COLUMNS.length - 1, colIndex + 1)] });
         break;
       case "Tab":
         e.preventDefault();
@@ -250,17 +265,21 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
           let nextColIndex = e.shiftKey ? colIndex - 1 : colIndex + 1;
           let nextRowIndex = rowIndex;
           if (nextColIndex < 0) {
-            nextColIndex = EDITABLE_COLUMNS.length - 1;
+            nextColIndex = ALL_COLUMNS.length - 1;
             nextRowIndex = Math.max(0, rowIndex - 1);
-          } else if (nextColIndex >= EDITABLE_COLUMNS.length) {
+          } else if (nextColIndex >= ALL_COLUMNS.length) {
             nextColIndex = 0;
             nextRowIndex = Math.min((channels?.length ?? 1) - 1, rowIndex + 1);
           }
-          selectCell({ rowIndex: nextRowIndex, columnId: EDITABLE_COLUMNS[nextColIndex] });
+          selectCell({ rowIndex: nextRowIndex, columnId: ALL_COLUMNS[nextColIndex] });
         }
         break;
       case "Enter":
         e.preventDefault();
+        if (isPortColumn) {
+          // Port column: Enter opens the dropdown (handled by PortSelectCell)
+          break;
+        }
         if (e.altKey) {
           // Alt+Enter: Copy value from cell above, increment trailing number, save, and move down
           const aboveChannel = channels?.[rowIndex - 1];
@@ -288,6 +307,10 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
         break;
       case "F2":
         e.preventDefault();
+        if (isPortColumn) {
+          // Port column: F2 opens the dropdown (handled by PortSelectCell)
+          break;
+        }
         {
           const channel = channels?.[rowIndex];
           if (channel) {
@@ -300,6 +323,14 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
       case "Delete":
       case "Backspace":
         e.preventDefault();
+        if (isPortColumn) {
+          // Port column: Clear port assignment
+          const channel = channels?.[rowIndex];
+          if (channel) {
+            handlePortSelect(channel._id, null);
+          }
+          break;
+        }
         {
           const channel = channels?.[rowIndex];
           if (channel) {
@@ -316,7 +347,8 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
         setActiveCell(null); // Deselect
         break;
       default:
-        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Alphanumeric input starts editing (only for text columns)
+        if (!isPortColumn && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
           setPendingValue(e.key);
           setEditValue(e.key);
@@ -326,16 +358,11 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
     }
   };
 
-  const getPortLabel = (portId: string | undefined) => {
-    if (!portId) return "-";
-    const port = outputPorts.find((p) => p._id === portId);
-    return port?.label ?? "-";
-  };
-
-  const getPortColor = (portId: string | undefined) => {
-    if (!portId) return undefined;
-    const port = outputPorts.find((p) => p._id === portId);
-    return port?.ioDeviceColor;
+  const handlePortSelect = async (channelId: string, portId: string | null) => {
+    await patchChannel({
+      channelId: channelId as Id<"outputChannels">,
+      ioPortId: portId as Id<"ioPorts"> | null,
+    });
   };
 
   const isCellActive = (rowIndex: number, columnId: string) => {
@@ -367,6 +394,32 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
         </div>
       </div>
 
+      {/* Selection toolbar */}
+      {selection.hasSelection && (
+        <div className="flex items-center gap-3 p-3 bg-primary/10 rounded-lg border border-primary/20">
+          <span className="text-sm font-medium">
+            {selection.selectionCount} channel{selection.selectionCount !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex-1" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAutoPatchDialogOpen(true)}
+          >
+            <Zap className="mr-2 h-4 w-4" />
+            Auto-Patch
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={selection.clearSelection}
+          >
+            <X className="mr-2 h-4 w-4" />
+            Clear
+          </Button>
+        </div>
+      )}
+
       <div
         ref={containerRef}
         className="border rounded-lg overflow-hidden focus:outline-none"
@@ -377,6 +430,20 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
+              <TableHead className="w-10 text-center">
+                <input
+                  type="checkbox"
+                  checked={channels.length > 0 && selection.selectionCount === channels.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      selection.selectAll();
+                    } else {
+                      selection.clearSelection();
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </TableHead>
               <TableHead className="w-12 text-center">#</TableHead>
               <TableHead className="w-32">Port</TableHead>
               <TableHead className="min-w-[120px]">Bus Name</TableHead>
@@ -391,7 +458,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
           <TableBody>
             {channels.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                   No output channels yet.
                 </TableCell>
               </TableRow>
@@ -399,26 +466,38 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
               channels.map((channel, rowIndex) => (
                 <TableRow
                   key={channel._id}
-                  className={`group ${activeCell?.rowIndex === rowIndex ? "bg-muted/30" : ""}`}
+                  className={`group ${activeCell?.rowIndex === rowIndex ? "bg-muted/30" : ""} ${selection.isSelected(channel._id) ? "bg-primary/5" : ""}`}
                 >
+                  <TableCell className="text-center">
+                    <input
+                      type="checkbox"
+                      checked={selection.isSelected(channel._id)}
+                      onChange={() => selection.toggleSelection(channel._id)}
+                      onClick={(e) => {
+                        if (e.shiftKey && channels.length > 0) {
+                          // Shift+click for range selection
+                          const lastSelected = selection.getSelectedInOrder().at(-1);
+                          if (lastSelected) {
+                            selection.selectRange(lastSelected, channel._id);
+                          }
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                  </TableCell>
                   <TableCell className="text-center font-mono text-sm">
                     {rowIndex + 1}
                   </TableCell>
-                  <TableCell>
-                    {channel.ioPortId ? (
-                      <Badge
-                        variant="outline"
-                        style={{
-                          borderColor: getPortColor(channel.ioPortId),
-                          color: getPortColor(channel.ioPortId),
-                        }}
-                      >
-                        {getPortLabel(channel.ioPortId)}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
+                  <PortSelectCell
+                    value={channel.ioPortId}
+                    portGroups={portGroups ?? []}
+                    portUsageMap={portUsageMap}
+                    currentChannelId={channel._id}
+                    isActive={isCellActive(rowIndex, "port")}
+                    onSelect={(portId) => handlePortSelect(channel._id, portId)}
+                    onCellClick={() => selectCell({ rowIndex, columnId: "port" })}
+                    onOpenChange={(open) => setPortDropdownOpen(open ? rowIndex : null)}
+                  />
 
                   {EDITABLE_COLUMNS.map((columnId) => (
                     <EditableCell
@@ -478,6 +557,15 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      <AutoPatchDialog
+        open={autoPatchDialogOpen}
+        onOpenChange={setAutoPatchDialogOpen}
+        projectId={projectId}
+        channelType="output"
+        selectedChannelIds={selection.getSelectedInOrder()}
+        onComplete={selection.clearSelection}
+      />
     </div>
   );
 }

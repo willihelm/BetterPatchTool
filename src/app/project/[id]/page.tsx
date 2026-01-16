@@ -14,6 +14,7 @@ import { InputChannelTable } from "@/components/project/input-channel-table";
 import { OutputChannelTable } from "@/components/project/output-channel-table";
 import { IOOverview } from "@/components/project/io-overview";
 import { MixerSettingsDialog } from "@/components/project/mixer-settings-dialog";
+import { PatchMatrix } from "@/components/project/patch-matrix";
 import type { Project, Mixer } from "@/types/convex";
 
 export default function ProjectPage() {
@@ -106,6 +107,7 @@ export default function ProjectPage() {
           <TabsList className="mb-4">
             <TabsTrigger value="inputs">Input Patch List</TabsTrigger>
             <TabsTrigger value="outputs">Output Patch List</TabsTrigger>
+            <TabsTrigger value="matrix">Patch Matrix</TabsTrigger>
             <TabsTrigger value="io-devices">IO Devices</TabsTrigger>
           </TabsList>
 
@@ -115,6 +117,10 @@ export default function ProjectPage() {
 
           <TabsContent value="outputs" className="mt-0">
             <OutputChannelTable projectId={projectId} />
+          </TabsContent>
+
+          <TabsContent value="matrix" className="mt-0">
+            <PatchMatrix projectId={projectId} />
           </TabsContent>
 
           <TabsContent value="io-devices" className="mt-0">

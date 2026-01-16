@@ -1,0 +1,349 @@
+"use client";
+
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { Id } from "../../../convex/_generated/dataModel";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Check } from "lucide-react";
+
+interface PatchMatrixProps {
+  projectId: Id<"projects">;
+}
+
+export function PatchMatrix({ projectId }: PatchMatrixProps) {
+  const [channelType, setChannelType] = useState<"input" | "output">("input");
+  const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
+  const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number } | null>(null);
+  const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Queries
+  const inputChannels = useQuery(api.inputChannels.list, { projectId });
+  const outputChannels = useQuery(api.outputChannels.list, { projectId });
+  const portGroups = useQuery(api.patching.getAvailablePorts, {
+    projectId,
+    portType: channelType,
+  });
+
+  // Mutations
+  const patchInputChannel = useMutation(api.patching.patchInputChannel);
+  const patchOutputChannel = useMutation(api.patching.patchOutputChannel);
+
+  const channels = channelType === "input" ? inputChannels : outputChannels;
+
+  // Flatten ports for matrix columns
+  const allPorts = portGroups?.flatMap((group) =>
+    group.ports.map((port) => ({
+      ...port,
+      device: group.device,
+    }))
+  ) ?? [];
+
+  // Filter ports if showing unassigned only
+  const visiblePorts = showUnassignedOnly
+    ? allPorts.filter((port) => !port.isUsed)
+    : allPorts;
+
+  // Create a map of portId -> channelId for quick lookup
+  const portToChannelMap = new Map<string, string>();
+  channels?.forEach((channel) => {
+    if (channel.ioPortId) {
+      portToChannelMap.set(channel.ioPortId, channel._id);
+    }
+  });
+
+  const handleCellClick = useCallback(
+    async (portId: string, channelId: string, currentPortId: string | undefined) => {
+      const isAssigned = currentPortId === portId;
+
+      if (channelType === "input") {
+        await patchInputChannel({
+          channelId: channelId as Id<"inputChannels">,
+          ioPortId: isAssigned ? null : (portId as Id<"ioPorts">),
+        });
+      } else {
+        await patchOutputChannel({
+          channelId: channelId as Id<"outputChannels">,
+          ioPortId: isAssigned ? null : (portId as Id<"ioPorts">),
+        });
+      }
+    },
+    [channelType, patchInputChannel, patchOutputChannel]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!activeCell || !channels?.length || !visiblePorts.length) return;
+
+      const { row, col } = activeCell;
+
+      switch (e.key) {
+        case "ArrowUp":
+          e.preventDefault();
+          setActiveCell({ row: Math.max(0, row - 1), col });
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          setActiveCell({ row: Math.min(channels.length - 1, row + 1), col });
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          setActiveCell({ row, col: Math.max(0, col - 1) });
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          setActiveCell({ row, col: Math.min(visiblePorts.length - 1, col + 1) });
+          break;
+        case " ":
+        case "Enter":
+          e.preventDefault();
+          const channel = channels[row];
+          const port = visiblePorts[col];
+          if (channel && port) {
+            handleCellClick(port._id, channel._id, channel.ioPortId);
+          }
+          break;
+        case "Escape":
+          e.preventDefault();
+          setActiveCell(null);
+          break;
+      }
+    },
+    [activeCell, channels, visiblePorts, handleCellClick]
+  );
+
+  // Initialize active cell when data loads
+  useEffect(() => {
+    if (!activeCell && channels && channels.length > 0 && visiblePorts.length > 0) {
+      setActiveCell({ row: 0, col: 0 });
+    }
+  }, [activeCell, channels, visiblePorts.length]);
+
+  if (!channels || !portGroups) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-pulse text-muted-foreground">Loading matrix...</div>
+      </div>
+    );
+  }
+
+  if (channels.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        No {channelType} channels yet. Add some channels to use the patch matrix.
+      </div>
+    );
+  }
+
+  if (allPorts.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        No IO devices with {channelType} ports. Add IO devices to use the patch matrix.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Controls */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Button
+            variant={channelType === "input" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setChannelType("input")}
+          >
+            Input Channels
+          </Button>
+          <Button
+            variant={channelType === "output" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setChannelType("output")}
+          >
+            Output Channels
+          </Button>
+        </div>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={showUnassignedOnly}
+              onChange={(e) => setShowUnassignedOnly(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            Show unassigned ports only
+          </label>
+          <span className="text-xs text-muted-foreground">
+            Arrow keys navigate · Space/Enter toggle · Esc deselect
+          </span>
+        </div>
+      </div>
+
+      {/* Matrix */}
+      <div
+        ref={containerRef}
+        className="border rounded-lg overflow-auto focus:outline-none max-h-[calc(100vh-300px)]"
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        onFocus={() => {
+          if (!activeCell && channels.length > 0 && visiblePorts.length > 0) {
+            setActiveCell({ row: 0, col: 0 });
+          }
+        }}
+      >
+        <table className="w-full border-collapse">
+          <thead className="sticky top-0 z-10 bg-background">
+            <tr>
+              {/* Channel header cell */}
+              <th className="sticky left-0 z-20 bg-muted/50 border-b border-r p-2 text-left text-xs font-medium min-w-[180px]">
+                Channel
+              </th>
+              {/* Port headers */}
+              {visiblePorts.map((port, colIndex) => {
+                // Check if this is the first port of a device group
+                const isFirstOfDevice =
+                  colIndex === 0 ||
+                  visiblePorts[colIndex - 1]?.device._id !== port.device._id;
+
+                return (
+                  <th
+                    key={port._id}
+                    className={cn(
+                      "border-b p-2 text-center text-xs font-medium min-w-[50px] bg-muted/50 transition-colors",
+                      isFirstOfDevice && "border-l-2",
+                      (activeCell?.col === colIndex || hoveredCell?.col === colIndex) && "bg-primary/10"
+                    )}
+                  >
+                    <div className="flex flex-col items-center gap-1">
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: port.device.color }}
+                      />
+                      <span className="font-mono text-[10px]">{port.label}</span>
+                      {isFirstOfDevice && (
+                        <span className="text-[9px] text-muted-foreground">
+                          {port.device.shortName}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {channels.map((channel, rowIndex) => {
+              const channelNumber = channelType === "input"
+                ? (channel as { channelNumber?: number }).channelNumber ?? rowIndex + 1
+                : rowIndex + 1;
+              const channelName = channelType === "input"
+                ? (channel as { source?: string }).source
+                : (channel as { busName?: string }).busName;
+
+              return (
+                <tr key={channel._id}>
+                  {/* Channel label cell */}
+                  <td
+                    className={cn(
+                      "sticky left-0 z-10 border-r p-2 text-xs bg-background transition-colors",
+                      (activeCell?.row === rowIndex || hoveredCell?.row === rowIndex) && "bg-primary/10"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-medium w-6 text-right">
+                        {channelNumber}
+                      </span>
+                      <span className="text-muted-foreground truncate max-w-[140px]">
+                        {channelName || "-"}
+                      </span>
+                    </div>
+                  </td>
+                  {/* Matrix cells */}
+                  {visiblePorts.map((port, colIndex) => {
+                    const isAssigned = channel.ioPortId === port._id;
+                    const isActive =
+                      activeCell?.row === rowIndex && activeCell?.col === colIndex;
+                    const otherChannelId = portToChannelMap.get(port._id);
+                    const isUsedByOther =
+                      otherChannelId && otherChannelId !== channel._id;
+
+                    // Check if this is the first port of a device group for border
+                    const isFirstOfDevice =
+                      colIndex === 0 ||
+                      visiblePorts[colIndex - 1]?.device._id !== port.device._id;
+
+                    // Crosshair highlighting
+                    const isInCrosshair = hoveredCell && (
+                      hoveredCell.row === rowIndex || hoveredCell.col === colIndex
+                    );
+                    const isHovered = hoveredCell?.row === rowIndex && hoveredCell?.col === colIndex;
+
+                    return (
+                      <td
+                        key={port._id}
+                        className={cn(
+                          "border p-0 text-center cursor-pointer transition-colors",
+                          isFirstOfDevice && "border-l-2",
+                          isActive && "ring-2 ring-primary ring-inset",
+                          isAssigned
+                            ? "bg-primary/20"
+                            : isUsedByOther
+                            ? "bg-muted/30"
+                            : isHovered
+                            ? "bg-primary/15"
+                            : isInCrosshair
+                            ? "bg-muted/40"
+                            : "hover:bg-muted/50"
+                        )}
+                        onClick={() => {
+                          setActiveCell({ row: rowIndex, col: colIndex });
+                          handleCellClick(port._id, channel._id, channel.ioPortId);
+                        }}
+                        onMouseEnter={() => setHoveredCell({ row: rowIndex, col: colIndex })}
+                        onMouseLeave={() => setHoveredCell(null)}
+                      >
+                        <div className="w-full h-8 flex items-center justify-center">
+                          {isAssigned && (
+                            <Check
+                              className="h-4 w-4"
+                              style={{ color: port.device.color }}
+                            />
+                          )}
+                          {isUsedByOther && !isAssigned && (
+                            <span className="text-xs text-muted-foreground">·</span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-6 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-primary/20 border rounded flex items-center justify-center">
+            <Check className="h-3 w-3" />
+          </div>
+          <span>Assigned</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-muted/30 border rounded flex items-center justify-center">
+            <span>·</span>
+          </div>
+          <span>Used by another channel</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 border rounded" />
+          <span>Available</span>
+        </div>
+      </div>
+    </div>
+  );
+}
