@@ -42,7 +42,7 @@ const PRESET_COLORS = [
 ];
 
 export function IOOverview({ projectId }: IOOverviewProps) {
-  const ioDevices = useQuery(api.ioDevices.list, { projectId }) as IODevice[] | undefined;
+  const ioDevices = useQuery(api.ioDevices.list, { projectId });
   const createIODevice = useMutation(api.ioDevices.create);
   const removeIODevice = useMutation(api.ioDevices.remove);
 

@@ -56,7 +56,7 @@ function incrementTrailingNumber(value: string): string {
 }
 
 export function InputChannelTable({ projectId }: InputChannelTableProps) {
-  const channels = useQuery(api.inputChannels.list, { projectId }) as InputChannel[] | undefined;
+  const channels = useQuery(api.inputChannels.list, { projectId });
   const portGroups = useQuery(api.patching.getAvailablePorts, { projectId, portType: "input" });
   const portUsageMap = useQuery(api.patching.getPortUsageMap, { projectId }) ?? {};
 
