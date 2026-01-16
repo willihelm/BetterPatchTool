@@ -1,12 +1,21 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Check } from "lucide-react";
+import { Check, Filter, ChevronDown } from "lucide-react";
 
 interface PatchMatrixProps {
   projectId: Id<"projects">;
@@ -17,6 +26,8 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
   const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number } | null>(null);
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<string>>(new Set());
+  const [isDeviceFilterInitialized, setIsDeviceFilterInitialized] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Queries
@@ -33,13 +44,18 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
 
   const channels = channelType === "input" ? inputChannels : outputChannels;
 
+  // Filter port groups by selected devices
+  const filteredPortGroups = portGroups?.filter((group) =>
+    selectedDeviceIds.has(group.device._id)
+  ) ?? [];
+
   // Flatten ports for matrix columns
-  const allPorts = portGroups?.flatMap((group) =>
+  const allPorts = filteredPortGroups.flatMap((group) =>
     group.ports.map((port) => ({
       ...port,
       device: group.device,
     }))
-  ) ?? [];
+  );
 
   // Filter ports if showing unassigned only
   const visiblePorts = showUnassignedOnly
@@ -121,6 +137,88 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
     }
   }, [activeCell, channels, visiblePorts.length]);
 
+  // Memoize device IDs to avoid resetting selection on port data changes
+  const deviceIds = useMemo(() => {
+    if (!portGroups) return [];
+    return portGroups.map((g) => g.device._id).sort();
+  }, [portGroups]);
+
+  const deviceIdsKey = deviceIds.join(",");
+
+  // Initialize device selection when port groups load
+  useEffect(() => {
+    if (deviceIds.length > 0 && !isDeviceFilterInitialized) {
+      setSelectedDeviceIds(new Set(deviceIds));
+      setIsDeviceFilterInitialized(true);
+    }
+  }, [deviceIds, isDeviceFilterInitialized]);
+
+  // Handle device additions/removals (only when device list actually changes)
+  useEffect(() => {
+    if (deviceIds.length > 0 && isDeviceFilterInitialized) {
+      const currentDeviceIds = new Set(deviceIds);
+      setSelectedDeviceIds((prev) => {
+        // Check if anything actually changed
+        const prevIds = Array.from(prev).sort().join(",");
+        const hasNewDevices = deviceIds.some((id) => !prev.has(id));
+        const hasRemovedDevices = Array.from(prev).some((id) => !currentDeviceIds.has(id));
+
+        if (!hasNewDevices && !hasRemovedDevices) {
+          return prev; // No change needed
+        }
+
+        const next = new Set<string>();
+        // Keep existing selections that still exist
+        prev.forEach((id) => {
+          if (currentDeviceIds.has(id)) {
+            next.add(id);
+          }
+        });
+        // Add any new devices
+        deviceIds.forEach((id) => {
+          if (!prev.has(id)) {
+            next.add(id);
+          }
+        });
+        return next;
+      });
+    }
+  }, [deviceIdsKey, isDeviceFilterInitialized]);
+
+  // Reset active cell if it becomes invalid after filtering
+  useEffect(() => {
+    if (activeCell && activeCell.col >= visiblePorts.length) {
+      setActiveCell(
+        visiblePorts.length > 0
+          ? { row: activeCell.row, col: visiblePorts.length - 1 }
+          : null
+      );
+    }
+  }, [visiblePorts.length, activeCell]);
+
+  // Device selection helper functions
+  const toggleDevice = useCallback((deviceId: string) => {
+    setSelectedDeviceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(deviceId)) {
+        next.delete(deviceId);
+      } else {
+        next.add(deviceId);
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAllDevices = useCallback(() => {
+    if (portGroups) {
+      setSelectedDeviceIds(new Set(portGroups.map((g) => g.device._id)));
+    }
+  }, [portGroups]);
+
+  const clearDeviceSelection = useCallback(() => {
+    setSelectedDeviceIds(new Set());
+  }, []);
+
   if (!channels || !portGroups) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -137,7 +235,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
     );
   }
 
-  if (allPorts.length === 0) {
+  if (allPorts.length === 0 && portGroups.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground">
         No IO devices with {channelType} ports. Add IO devices to use the patch matrix.
@@ -145,10 +243,12 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
     );
   }
 
+  const noDevicesSelected = allPorts.length === 0 && portGroups.length > 0;
+
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-6">
         <div className="flex items-center gap-2">
           <Button
             variant={channelType === "input" ? "default" : "outline"}
@@ -166,6 +266,54 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           </Button>
         </div>
         <div className="flex items-center gap-4">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="h-4 w-4" />
+                <span>Devices</span>
+                <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+                  {selectedDeviceIds.size}/{portGroups.length}
+                </Badge>
+                <ChevronDown className="h-4 w-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem
+                onClick={selectAllDevices}
+                onSelect={(e) => e.preventDefault()}
+                disabled={selectedDeviceIds.size === portGroups.length}
+              >
+                Select All
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={clearDeviceSelection}
+                onSelect={(e) => e.preventDefault()}
+                disabled={selectedDeviceIds.size === 0}
+              >
+                Clear All
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {portGroups.map((group) => (
+                <DropdownMenuCheckboxItem
+                  key={group.device._id}
+                  checked={selectedDeviceIds.has(group.device._id)}
+                  onCheckedChange={() => toggleDevice(group.device._id)}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: group.device.color }}
+                    />
+                    <span className="truncate">{group.device.name}</span>
+                    <Badge variant="outline" className="ml-auto text-xs">
+                      {group.device.shortName}
+                    </Badge>
+                  </div>
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -181,18 +329,24 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
         </div>
       </div>
 
-      {/* Matrix */}
-      <div
-        ref={containerRef}
-        className="border rounded-lg overflow-auto focus:outline-none max-h-[calc(100vh-300px)]"
-        tabIndex={0}
-        onKeyDown={handleKeyDown}
-        onFocus={() => {
-          if (!activeCell && channels.length > 0 && visiblePorts.length > 0) {
-            setActiveCell({ row: 0, col: 0 });
-          }
-        }}
-      >
+      {/* Matrix or Empty State */}
+      {noDevicesSelected ? (
+        <div className="text-center py-12 text-muted-foreground border rounded-lg">
+          No devices selected. Use the Devices filter to select which devices to show.
+        </div>
+      ) : (
+        <>
+          <div
+            ref={containerRef}
+            className="border rounded-lg overflow-auto focus:outline-none max-h-[calc(100vh-300px)]"
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+            onFocus={() => {
+              if (!activeCell && channels.length > 0 && visiblePorts.length > 0) {
+                setActiveCell({ row: 0, col: 0 });
+              }
+            }}
+          >
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10 bg-background">
             <tr>
@@ -322,28 +476,30 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
               );
             })}
           </tbody>
-        </table>
-      </div>
+          </table>
+          </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-6 text-xs text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-primary/20 border rounded flex items-center justify-center">
-            <Check className="h-3 w-3" />
+          {/* Legend */}
+          <div className="flex items-center gap-6 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-primary/20 border rounded flex items-center justify-center">
+                <Check className="h-3 w-3" />
+              </div>
+              <span>Assigned</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-muted/30 border rounded flex items-center justify-center">
+                <span>·</span>
+              </div>
+              <span>Used by another channel</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border rounded" />
+              <span>Available</span>
+            </div>
           </div>
-          <span>Assigned</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-muted/30 border rounded flex items-center justify-center">
-            <span>·</span>
-          </div>
-          <span>Used by another channel</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 border rounded" />
-          <span>Available</span>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
