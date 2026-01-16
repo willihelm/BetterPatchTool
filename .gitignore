@@ -38,3 +38,6 @@ next-env.d.ts
 
 # Convex
 .convex/
+
+# Playwright
+.playwright-mcp
