@@ -33,6 +33,7 @@ import {
 import { Plus, Trash2, Box, ArrowRight, ArrowLeft, Eye, Grid3X3, List } from "lucide-react";
 import Link from "next/link";
 import type { IODevice } from "@/types/convex";
+import { IODeviceEditDialog } from "./io-device-edit-dialog";
 
 interface IOOverviewProps {
   projectId: Id<"projects">;
@@ -304,23 +305,22 @@ export function IOOverview({ projectId }: IOOverviewProps) {
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
-                    size="sm"
-                    className="flex-1"
+                    size="icon"
                     asChild
+                    title="View Ports"
                   >
                     <Link href={`/project/${projectId}/io/${ioDevice._id}`}>
-                      <Eye className="mr-2 h-4 w-4" />
-                      View Ports
+                      <Eye className="h-4 w-4" />
                     </Link>
                   </Button>
+                  <IODeviceEditDialog ioDevice={ioDevice as IODevice} />
                   <Button
                     variant="destructive"
-                    size="sm"
-                    className="flex-1"
+                    size="icon"
                     onClick={() => removeIODevice({ ioDeviceId: ioDevice._id })}
+                    title="Remove"
                   >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Remove
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </CardContent>

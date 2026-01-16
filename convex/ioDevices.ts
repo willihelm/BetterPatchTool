@@ -191,3 +191,115 @@ export const updatePortLabel = mutation({
     await ctx.db.patch(args.portId, { label: args.label });
   },
 });
+
+// Update all port labels when shortName changes
+export const updatePortLabels = mutation({
+  args: {
+    ioDeviceId: v.id("ioDevices"),
+    newShortName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const ioDevice = await ctx.db.get(args.ioDeviceId);
+    if (!ioDevice) return;
+
+    const ports = await ctx.db
+      .query("ioPorts")
+      .withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", args.ioDeviceId))
+      .collect();
+
+    for (const port of ports) {
+      const typePrefix = port.type === "input" ? "I" : "O";
+      const newLabel = `${args.newShortName}-${typePrefix}${port.portNumber}`;
+      await ctx.db.patch(port._id, { label: newLabel });
+    }
+  },
+});
+
+// Update port counts (add or remove ports)
+export const updatePortCounts = mutation({
+  args: {
+    ioDeviceId: v.id("ioDevices"),
+    newInputCount: v.number(),
+    newOutputCount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const ioDevice = await ctx.db.get(args.ioDeviceId);
+    if (!ioDevice) return;
+
+    const ports = await ctx.db
+      .query("ioPorts")
+      .withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", args.ioDeviceId))
+      .collect();
+
+    const inputPorts = ports.filter((p) => p.type === "input").sort((a, b) => a.portNumber - b.portNumber);
+    const outputPorts = ports.filter((p) => p.type === "output").sort((a, b) => a.portNumber - b.portNumber);
+
+    // Handle input ports
+    if (args.newInputCount > inputPorts.length) {
+      // Add new input ports
+      for (let i = inputPorts.length + 1; i <= args.newInputCount; i++) {
+        await ctx.db.insert("ioPorts", {
+          ioDeviceId: args.ioDeviceId,
+          type: "input",
+          portNumber: i,
+          label: `${ioDevice.shortName}-I${i}`,
+        });
+      }
+    } else if (args.newInputCount < inputPorts.length) {
+      // Remove excess input ports and clear channel references
+      const portsToRemove = inputPorts.filter((p) => p.portNumber > args.newInputCount);
+      for (const port of portsToRemove) {
+        // Clear references in input channels
+        const channels = await ctx.db
+          .query("inputChannels")
+          .withIndex("by_ioPort", (q) => q.eq("ioPortId", port._id))
+          .collect();
+        for (const channel of channels) {
+          await ctx.db.patch(channel._id, { ioPortId: undefined });
+        }
+        // Also check ioPortIdRight for stereo
+        const stereoChannels = await ctx.db
+          .query("inputChannels")
+          .filter((q) => q.eq(q.field("ioPortIdRight"), port._id))
+          .collect();
+        for (const channel of stereoChannels) {
+          await ctx.db.patch(channel._id, { ioPortIdRight: undefined });
+        }
+        await ctx.db.delete(port._id);
+      }
+    }
+
+    // Handle output ports
+    if (args.newOutputCount > outputPorts.length) {
+      // Add new output ports
+      for (let i = outputPorts.length + 1; i <= args.newOutputCount; i++) {
+        await ctx.db.insert("ioPorts", {
+          ioDeviceId: args.ioDeviceId,
+          type: "output",
+          portNumber: i,
+          label: `${ioDevice.shortName}-O${i}`,
+        });
+      }
+    } else if (args.newOutputCount < outputPorts.length) {
+      // Remove excess output ports and clear channel references
+      const portsToRemove = outputPorts.filter((p) => p.portNumber > args.newOutputCount);
+      for (const port of portsToRemove) {
+        // Clear references in output channels
+        const channels = await ctx.db
+          .query("outputChannels")
+          .withIndex("by_ioPort", (q) => q.eq("ioPortId", port._id))
+          .collect();
+        for (const channel of channels) {
+          await ctx.db.patch(channel._id, { ioPortId: undefined });
+        }
+        await ctx.db.delete(port._id);
+      }
+    }
+
+    // Update the device counts
+    await ctx.db.patch(args.ioDeviceId, {
+      inputCount: args.newInputCount,
+      outputCount: args.newOutputCount,
+    });
+  },
+});
