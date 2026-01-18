@@ -47,6 +47,9 @@ export function StageboxOverview({ projectId }: StageboxOverviewProps) {
   // Separate devices with inputs from devices with outputs
   const devicesWithInputs = stageboxDevices.filter((d) => d.inputPorts.length > 0);
   const devicesWithOutputs = stageboxDevices.filter((d) => d.outputPorts.length > 0);
+  const devicesWithHeadphones = stageboxDevices.filter((d) => d.headphonePorts && d.headphonePorts.length > 0);
+  const devicesWithAesInputs = stageboxDevices.filter((d) => d.aesInputPorts && d.aesInputPorts.length > 0);
+  const devicesWithAesOutputs = stageboxDevices.filter((d) => d.aesOutputPorts && d.aesOutputPorts.length > 0);
 
   return (
     <div className="space-y-8">
@@ -81,6 +84,63 @@ export function StageboxOverview({ projectId }: StageboxOverviewProps) {
               ports={device.outputPorts}
               portUsageMap={portUsageMap}
               portsPerRow={device.portsPerRow ?? 12}
+            />
+          ))}
+        </section>
+      )}
+
+      {/* Headphone Outputs Section */}
+      {devicesWithHeadphones.length > 0 && (
+        <section>
+          <h3 className="text-lg font-medium mb-4 pb-2 border-b">
+            Stageboxes: Headphone Outputs
+          </h3>
+          {devicesWithHeadphones.map((device) => (
+            <StageboxGrid
+              key={`${device._id}-headphones`}
+              device={device}
+              ports={device.headphonePorts!}
+              portUsageMap={portUsageMap}
+              portsPerRow={device.portsPerRow ?? 12}
+              isHeadphone={true}
+            />
+          ))}
+        </section>
+      )}
+
+      {/* AES Inputs Section */}
+      {devicesWithAesInputs.length > 0 && (
+        <section>
+          <h3 className="text-lg font-medium mb-4 pb-2 border-b">
+            Stageboxes: AES Inputs
+          </h3>
+          {devicesWithAesInputs.map((device) => (
+            <StageboxGrid
+              key={`${device._id}-aes-inputs`}
+              device={device}
+              ports={device.aesInputPorts!}
+              portUsageMap={portUsageMap}
+              portsPerRow={device.portsPerRow ?? 12}
+              isAes={true}
+            />
+          ))}
+        </section>
+      )}
+
+      {/* AES Outputs Section */}
+      {devicesWithAesOutputs.length > 0 && (
+        <section>
+          <h3 className="text-lg font-medium mb-4 pb-2 border-b">
+            Stageboxes: AES Outputs
+          </h3>
+          {devicesWithAesOutputs.map((device) => (
+            <StageboxGrid
+              key={`${device._id}-aes-outputs`}
+              device={device}
+              ports={device.aesOutputPorts!}
+              portUsageMap={portUsageMap}
+              portsPerRow={device.portsPerRow ?? 12}
+              isAes={true}
             />
           ))}
         </section>

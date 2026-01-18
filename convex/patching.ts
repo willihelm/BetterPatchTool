@@ -108,7 +108,24 @@ export const getAvailablePorts = query({
         )
         .collect();
 
-      const sortedPorts = ports.sort((a, b) => a.portNumber - b.portNumber);
+      // Sort ports: regular first, then headphones, then AES (by portNumber within each group)
+      const sortedPorts = ports.sort((a, b) => {
+        const aIsHeadphone = a.subType === "headphone_left" || a.subType === "headphone_right";
+        const bIsHeadphone = b.subType === "headphone_left" || b.subType === "headphone_right";
+        const aIsAes = a.subType === "aes_left" || a.subType === "aes_right";
+        const bIsAes = b.subType === "aes_left" || b.subType === "aes_right";
+        const aIsRegular = !aIsHeadphone && !aIsAes;
+        const bIsRegular = !bIsHeadphone && !bIsAes;
+
+        // Regular first, then headphones, then AES
+        if (aIsRegular && !bIsRegular) return -1;
+        if (!aIsRegular && bIsRegular) return 1;
+        if (aIsHeadphone && bIsAes) return -1;
+        if (aIsAes && bIsHeadphone) return 1;
+
+        // Within same type, sort by portNumber
+        return a.portNumber - b.portNumber;
+      });
 
       result.push({
         device: {
@@ -370,6 +387,58 @@ export const autoPatchOutputChannels = mutation({
       skipped,
       total: args.channelIds.length,
     };
+  },
+});
+
+// Batch patch multiple channels at once (for diagonal patching)
+export const batchPatchChannels = mutation({
+  args: {
+    channelType: v.union(v.literal("input"), v.literal("output")),
+    patches: v.array(v.object({
+      channelId: v.string(),
+      ioPortId: v.union(v.string(), v.null()),
+    })),
+  },
+  handler: async (ctx, args) => {
+    for (const patch of args.patches) {
+      if (args.channelType === "input") {
+        const channelId = patch.channelId as Id<"inputChannels">;
+        const channel = await ctx.db.get(channelId);
+        if (!channel) continue;
+
+        if (patch.ioPortId === null) {
+          await ctx.db.patch(channelId, {
+            ioPortId: undefined,
+            patched: false,
+          });
+        } else {
+          const portId = patch.ioPortId as Id<"ioPorts">;
+          const port = await ctx.db.get(portId);
+          if (!port || port.type !== "input") continue;
+
+          await ctx.db.patch(channelId, {
+            ioPortId: portId,
+            patched: true,
+          });
+        }
+      } else {
+        const channelId = patch.channelId as Id<"outputChannels">;
+        const channel = await ctx.db.get(channelId);
+        if (!channel) continue;
+
+        if (patch.ioPortId === null) {
+          await ctx.db.patch(channelId, { ioPortId: undefined });
+        } else {
+          const portId = patch.ioPortId as Id<"ioPorts">;
+          const port = await ctx.db.get(portId);
+          if (!port || port.type !== "output") continue;
+
+          await ctx.db.patch(channelId, { ioPortId: portId });
+        }
+      }
+    }
+
+    return { patched: args.patches.length };
   },
 });
 

@@ -32,6 +32,9 @@ export interface IODevice {
   color: string;
   inputCount: number;
   outputCount: number;
+  headphoneOutputCount?: number;
+  aesInputCount?: number;
+  aesOutputCount?: number;
   position?: { x: number; y: number };
   deviceType?: "stagebox" | "generic";
   portsPerRow?: number;
@@ -44,6 +47,9 @@ export interface IOPort {
   type: "input" | "output";
   portNumber: number;
   label: string;
+  subType?: "regular" | "headphone_left" | "headphone_right" | "aes_left" | "aes_right";
+  headphoneNumber?: number;
+  aesNumber?: number;
   ioDeviceName?: string;
   ioDeviceColor?: string;
 }

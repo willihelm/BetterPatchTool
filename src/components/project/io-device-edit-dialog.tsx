@@ -54,6 +54,9 @@ export function IODeviceEditDialog({ ioDevice }: IODeviceEditDialogProps) {
     portsPerRow: ioDevice.portsPerRow ?? 12,
     inputCount: ioDevice.inputCount,
     outputCount: ioDevice.outputCount,
+    headphoneOutputCount: ioDevice.headphoneOutputCount ?? 0,
+    aesInputCount: ioDevice.aesInputCount ?? 0,
+    aesOutputCount: ioDevice.aesOutputCount ?? 0,
   });
   const [updateLabels, setUpdateLabels] = useState(false);
 
@@ -68,13 +71,20 @@ export function IODeviceEditDialog({ ioDevice }: IODeviceEditDialogProps) {
         portsPerRow: ioDevice.portsPerRow ?? 12,
         inputCount: ioDevice.inputCount,
         outputCount: ioDevice.outputCount,
+        headphoneOutputCount: ioDevice.headphoneOutputCount ?? 0,
+        aesInputCount: ioDevice.aesInputCount ?? 0,
+        aesOutputCount: ioDevice.aesOutputCount ?? 0,
       });
       setUpdateLabels(false);
     }
   }, [isOpen, ioDevice]);
 
   const shortNameChanged = formData.shortName !== ioDevice.shortName;
-  const portCountsChanged = formData.inputCount !== ioDevice.inputCount || formData.outputCount !== ioDevice.outputCount;
+  const portCountsChanged = formData.inputCount !== ioDevice.inputCount ||
+    formData.outputCount !== ioDevice.outputCount ||
+    formData.headphoneOutputCount !== (ioDevice.headphoneOutputCount ?? 0) ||
+    formData.aesInputCount !== (ioDevice.aesInputCount ?? 0) ||
+    formData.aesOutputCount !== (ioDevice.aesOutputCount ?? 0);
 
   const handleSave = async () => {
     if (!formData.name || !formData.shortName) return;
@@ -102,6 +112,9 @@ export function IODeviceEditDialog({ ioDevice }: IODeviceEditDialogProps) {
         ioDeviceId: ioDevice._id as Parameters<typeof updatePortCounts>[0]["ioDeviceId"],
         newInputCount: formData.inputCount,
         newOutputCount: formData.outputCount,
+        newHeadphoneOutputCount: formData.headphoneOutputCount,
+        newAesInputCount: formData.aesInputCount,
+        newAesOutputCount: formData.aesOutputCount,
       });
     }
 
@@ -264,7 +277,78 @@ export function IODeviceEditDialog({ ioDevice }: IODeviceEditDialogProps) {
               />
             </div>
           </div>
-          {portCountsChanged && (formData.inputCount < ioDevice.inputCount || formData.outputCount < ioDevice.outputCount) && (
+          <div className="space-y-2">
+            <Label htmlFor="edit-io-headphones">Headphone Outputs (stereo pairs)</Label>
+            <Input
+              id="edit-io-headphones"
+              type="number"
+              min={0}
+              max={16}
+              value={formData.headphoneOutputCount}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  headphoneOutputCount: parseInt(e.target.value) || 0,
+                })
+              }
+            />
+            {formData.headphoneOutputCount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                HP ports: {Array.from({ length: formData.headphoneOutputCount }, (_, i) =>
+                  `${formData.shortName || "XX"}-HP${i + 1}L, ${formData.shortName || "XX"}-HP${i + 1}R`
+                ).join(", ")}
+              </p>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-io-aes-inputs">AES Inputs (stereo pairs)</Label>
+              <Input
+                id="edit-io-aes-inputs"
+                type="number"
+                min={0}
+                max={16}
+                value={formData.aesInputCount}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    aesInputCount: parseInt(e.target.value) || 0,
+                  })
+                }
+              />
+              {formData.aesInputCount > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {Array.from({ length: formData.aesInputCount }, (_, i) =>
+                    `${formData.shortName || "XX"}-AES${i + 1}L/R`
+                  ).join(", ")}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-io-aes-outputs">AES Outputs (stereo pairs)</Label>
+              <Input
+                id="edit-io-aes-outputs"
+                type="number"
+                min={0}
+                max={16}
+                value={formData.aesOutputCount}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    aesOutputCount: parseInt(e.target.value) || 0,
+                  })
+                }
+              />
+              {formData.aesOutputCount > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {Array.from({ length: formData.aesOutputCount }, (_, i) =>
+                    `${formData.shortName || "XX"}-AESO${i + 1}L/R`
+                  ).join(", ")}
+                </p>
+              )}
+            </div>
+          </div>
+          {portCountsChanged && (formData.inputCount < ioDevice.inputCount || formData.outputCount < ioDevice.outputCount || formData.headphoneOutputCount < (ioDevice.headphoneOutputCount ?? 0) || formData.aesInputCount < (ioDevice.aesInputCount ?? 0) || formData.aesOutputCount < (ioDevice.aesOutputCount ?? 0)) && (
             <p className="text-xs text-amber-600 dark:text-amber-400">
               Reducing port counts will remove ports and clear any channel assignments using those ports.
             </p>

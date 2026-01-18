@@ -28,6 +28,12 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
   const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<string>>(new Set());
   const [isDeviceFilterInitialized, setIsDeviceFilterInitialized] = useState(false);
+  const [diagonalAnchor, setDiagonalAnchor] = useState<{
+    row: number;
+    col: number;
+    mode: "patch" | "unpatch";
+  } | null>(null);
+  const [isShiftHeld, setIsShiftHeld] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Queries
@@ -41,6 +47,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   // Mutations
   const patchInputChannel = useMutation(api.patching.patchInputChannel);
   const patchOutputChannel = useMutation(api.patching.patchOutputChannel);
+  const batchPatchChannels = useMutation(api.patching.batchPatchChannels);
 
   const channels = channelType === "input" ? inputChannels : outputChannels;
 
@@ -70,10 +77,115 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
     }
   });
 
+  // Diagonal patching utilities
+  const isValidDiagonal = useCallback(
+    (start: { row: number; col: number }, end: { row: number; col: number }) => {
+      const rowDelta = end.row - start.row;
+      const colDelta = Math.abs(end.col - start.col);
+      // Valid diagonal: same absolute delta, and going downward (rowDelta > 0)
+      return rowDelta > 0 && rowDelta === colDelta;
+    },
+    []
+  );
+
+  const getDiagonalCells = useCallback(
+    (start: { row: number; col: number }, end: { row: number; col: number }) => {
+      const cells: { row: number; col: number }[] = [];
+      const rowDelta = end.row - start.row;
+      const colDirection = end.col > start.col ? 1 : -1;
+
+      for (let i = 0; i <= rowDelta; i++) {
+        cells.push({
+          row: start.row + i,
+          col: start.col + i * colDirection,
+        });
+      }
+      return cells;
+    },
+    []
+  );
+
+  // Track Shift key state
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Shift") {
+        setIsShiftHeld(true);
+      }
+      if (e.key === "Escape" && diagonalAnchor) {
+        setDiagonalAnchor(null);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Shift") {
+        setIsShiftHeld(false);
+        setDiagonalAnchor(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [diagonalAnchor]);
+
+  // Calculate preview cells for diagonal highlight
+  const diagonalPreviewCells = useMemo(() => {
+    if (!diagonalAnchor || !isShiftHeld || !hoveredCell) return new Set<string>();
+    if (!isValidDiagonal(diagonalAnchor, hoveredCell)) return new Set<string>();
+
+    const cells = getDiagonalCells(diagonalAnchor, hoveredCell);
+    return new Set(cells.map((c) => `${c.row}-${c.col}`));
+  }, [diagonalAnchor, isShiftHeld, hoveredCell, isValidDiagonal, getDiagonalCells]);
+
   const handleCellClick = useCallback(
-    async (portId: string, channelId: string, currentPortId: string | undefined) => {
+    async (
+      rowIndex: number,
+      colIndex: number,
+      portId: string,
+      channelId: string,
+      currentPortId: string | undefined,
+      isShiftClick: boolean
+    ) => {
       const isAssigned = currentPortId === portId;
 
+      // Handle Shift+Click for diagonal patching
+      if (isShiftClick && channels && visiblePorts.length > 0) {
+        if (!diagonalAnchor) {
+          // Set anchor - mode depends on whether the anchor cell is patched
+          setDiagonalAnchor({
+            row: rowIndex,
+            col: colIndex,
+            mode: isAssigned ? "unpatch" : "patch",
+          });
+          return;
+        }
+
+        // Check if valid diagonal from anchor
+        const end = { row: rowIndex, col: colIndex };
+        if (isValidDiagonal(diagonalAnchor, end)) {
+          // Execute batch patch
+          const cells = getDiagonalCells(diagonalAnchor, end);
+          const patches = cells
+            .filter((cell) => cell.row < channels.length && cell.col < visiblePorts.length)
+            .map((cell) => ({
+              channelId: channels[cell.row]._id,
+              ioPortId: diagonalAnchor.mode === "patch" ? visiblePorts[cell.col]._id : null,
+            }));
+
+          if (patches.length > 0) {
+            await batchPatchChannels({
+              channelType,
+              patches,
+            });
+          }
+        }
+        // Clear anchor after attempting diagonal (whether valid or not)
+        setDiagonalAnchor(null);
+        return;
+      }
+
+      // Normal click behavior
       if (channelType === "input") {
         await patchInputChannel({
           channelId: channelId as Id<"inputChannels">,
@@ -86,7 +198,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
         });
       }
     },
-    [channelType, patchInputChannel, patchOutputChannel]
+    [channelType, patchInputChannel, patchOutputChannel, batchPatchChannels, channels, visiblePorts, diagonalAnchor, isValidDiagonal, getDiagonalCells]
   );
 
   const handleKeyDown = useCallback(
@@ -118,12 +230,13 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           const channel = channels[row];
           const port = visiblePorts[col];
           if (channel && port) {
-            handleCellClick(port._id, channel._id, channel.ioPortId);
+            handleCellClick(row, col, port._id, channel._id, channel.ioPortId, e.shiftKey);
           }
           break;
         case "Escape":
           e.preventDefault();
           setActiveCell(null);
+          setDiagonalAnchor(null);
           break;
       }
     },
@@ -324,7 +437,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
             Show unassigned ports only
           </label>
           <span className="text-xs text-muted-foreground">
-            Arrow keys navigate · Space/Enter toggle · Esc deselect
+            Arrow keys navigate · Space/Enter toggle · Shift+Click diagonal · Esc deselect
           </span>
         </div>
       </div>
@@ -338,9 +451,15 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
         <>
           <div
             ref={containerRef}
-            className="border rounded-lg overflow-auto focus:outline-none max-h-[calc(100vh-300px)]"
+            className="border rounded-lg overflow-auto focus:outline-none max-h-[calc(100vh-300px)] select-none"
             tabIndex={0}
             onKeyDown={handleKeyDown}
+            onMouseDown={(e) => {
+              // Prevent text selection on Shift+Click
+              if (e.shiftKey) {
+                e.preventDefault();
+              }
+            }}
             onFocus={() => {
               if (!activeCell && channels.length > 0 && visiblePorts.length > 0) {
                 setActiveCell({ row: 0, col: 0 });
@@ -434,6 +553,10 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                     );
                     const isHovered = hoveredCell?.row === rowIndex && hoveredCell?.col === colIndex;
 
+                    // Diagonal anchor and preview highlighting
+                    const isAnchor = diagonalAnchor?.row === rowIndex && diagonalAnchor?.col === colIndex;
+                    const isInDiagonalPreview = diagonalPreviewCells.has(`${rowIndex}-${colIndex}`);
+
                     return (
                       <td
                         key={port._id}
@@ -441,19 +564,23 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                           "border p-0 text-center cursor-pointer transition-colors",
                           isFirstOfDevice && "border-l-2",
                           isActive && "ring-2 ring-primary ring-inset",
-                          isAssigned
-                            ? "bg-primary/20"
-                            : isUsedByOther
-                            ? "bg-muted/30"
-                            : isHovered
-                            ? "bg-primary/15"
-                            : isInCrosshair
-                            ? "bg-muted/40"
-                            : "hover:bg-muted/50"
+                          isAnchor && "ring-2 ring-amber-500 bg-amber-100/50 dark:bg-amber-900/30",
+                          !isAnchor && isInDiagonalPreview && "bg-primary/25",
+                          !isAnchor && !isInDiagonalPreview && (
+                            isAssigned
+                              ? "bg-primary/20"
+                              : isUsedByOther
+                              ? "bg-muted/30"
+                              : isHovered
+                              ? "bg-primary/15"
+                              : isInCrosshair
+                              ? "bg-muted/40"
+                              : "hover:bg-muted/50"
+                          )
                         )}
-                        onClick={() => {
+                        onClick={(e) => {
                           setActiveCell({ row: rowIndex, col: colIndex });
-                          handleCellClick(port._id, channel._id, channel.ioPortId);
+                          handleCellClick(rowIndex, colIndex, port._id, channel._id, channel.ioPortId, e.shiftKey);
                         }}
                         onMouseEnter={() => setHoveredCell({ row: rowIndex, col: colIndex })}
                         onMouseLeave={() => setHoveredCell(null)}

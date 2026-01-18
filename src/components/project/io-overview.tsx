@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Box, ArrowRight, ArrowLeft, Eye, Grid3X3, List } from "lucide-react";
+import { Plus, Trash2, Box, ArrowRight, ArrowLeft, Eye, Grid3X3, List, Headphones } from "lucide-react";
 import Link from "next/link";
 import type { IODevice } from "@/types/convex";
 import { IODeviceEditDialog } from "./io-device-edit-dialog";
@@ -62,6 +62,9 @@ export function IOOverview({ projectId }: IOOverviewProps) {
     color: PRESET_COLORS[0],
     inputCount: 32,
     outputCount: 16,
+    headphoneOutputCount: 0,
+    aesInputCount: 0,
+    aesOutputCount: 0,
     deviceType: "stagebox" as "stagebox" | "generic",
     portsPerRow: 12,
   });
@@ -76,6 +79,9 @@ export function IOOverview({ projectId }: IOOverviewProps) {
       color: newIODevice.color,
       inputCount: newIODevice.inputCount,
       outputCount: newIODevice.outputCount,
+      headphoneOutputCount: newIODevice.headphoneOutputCount,
+      aesInputCount: newIODevice.aesInputCount,
+      aesOutputCount: newIODevice.aesOutputCount,
       deviceType: newIODevice.deviceType,
       portsPerRow: newIODevice.deviceType === "stagebox" ? newIODevice.portsPerRow : undefined,
     });
@@ -86,6 +92,9 @@ export function IOOverview({ projectId }: IOOverviewProps) {
       color: PRESET_COLORS[(PRESET_COLORS.indexOf(newIODevice.color) + 1) % PRESET_COLORS.length],
       inputCount: 32,
       outputCount: 16,
+      headphoneOutputCount: 0,
+      aesInputCount: 0,
+      aesOutputCount: 0,
       deviceType: "stagebox",
       portsPerRow: 12,
     });
@@ -250,6 +259,77 @@ export function IOOverview({ projectId }: IOOverviewProps) {
                   />
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="io-headphones">Headphone Outputs (stereo pairs)</Label>
+                <Input
+                  id="io-headphones"
+                  type="number"
+                  min={0}
+                  max={16}
+                  value={newIODevice.headphoneOutputCount}
+                  onChange={(e) =>
+                    setNewIODevice({
+                      ...newIODevice,
+                      headphoneOutputCount: parseInt(e.target.value) || 0,
+                    })
+                  }
+                />
+                {newIODevice.headphoneOutputCount > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    HP ports: {Array.from({ length: newIODevice.headphoneOutputCount }, (_, i) =>
+                      `${newIODevice.shortName || "XX"}-HP${i + 1}L, ${newIODevice.shortName || "XX"}-HP${i + 1}R`
+                    ).join(", ")}
+                  </p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="io-aes-inputs">AES Inputs (stereo pairs)</Label>
+                  <Input
+                    id="io-aes-inputs"
+                    type="number"
+                    min={0}
+                    max={16}
+                    value={newIODevice.aesInputCount}
+                    onChange={(e) =>
+                      setNewIODevice({
+                        ...newIODevice,
+                        aesInputCount: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                  {newIODevice.aesInputCount > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {Array.from({ length: newIODevice.aesInputCount }, (_, i) =>
+                        `${newIODevice.shortName || "XX"}-AES${i + 1}L/R`
+                      ).join(", ")}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="io-aes-outputs">AES Outputs (stereo pairs)</Label>
+                  <Input
+                    id="io-aes-outputs"
+                    type="number"
+                    min={0}
+                    max={16}
+                    value={newIODevice.aesOutputCount}
+                    onChange={(e) =>
+                      setNewIODevice({
+                        ...newIODevice,
+                        aesOutputCount: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                  {newIODevice.aesOutputCount > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {Array.from({ length: newIODevice.aesOutputCount }, (_, i) =>
+                        `${newIODevice.shortName || "XX"}-AESO${i + 1}L/R`
+                      ).join(", ")}
+                    </p>
+                  )}
+                </div>
+              </div>
               <Button
                 onClick={handleCreate}
                 className="w-full"
@@ -292,15 +372,31 @@ export function IOOverview({ projectId }: IOOverviewProps) {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between text-sm text-muted-foreground mb-4">
+                <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground mb-4">
                   <div className="flex items-center gap-1">
                     <ArrowRight className="h-4 w-4" />
-                    <span>{ioDevice.inputCount} Inputs</span>
+                    <span>{ioDevice.inputCount} In</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <ArrowLeft className="h-4 w-4" />
-                    <span>{ioDevice.outputCount} Outputs</span>
+                    <span>{ioDevice.outputCount} Out</span>
                   </div>
+                  {(ioDevice.headphoneOutputCount ?? 0) > 0 && (
+                    <div className="flex items-center gap-1">
+                      <Headphones className="h-4 w-4" />
+                      <span>{ioDevice.headphoneOutputCount} HP</span>
+                    </div>
+                  )}
+                  {((ioDevice.aesInputCount ?? 0) > 0 || (ioDevice.aesOutputCount ?? 0) > 0) && (
+                    <div className="flex items-center gap-1">
+                      <span className="font-mono text-xs">AES</span>
+                      <span>
+                        {(ioDevice.aesInputCount ?? 0) > 0 && `${ioDevice.aesInputCount}In`}
+                        {(ioDevice.aesInputCount ?? 0) > 0 && (ioDevice.aesOutputCount ?? 0) > 0 && "/"}
+                        {(ioDevice.aesOutputCount ?? 0) > 0 && `${ioDevice.aesOutputCount}Out`}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button

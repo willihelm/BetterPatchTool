@@ -40,6 +40,9 @@ export default defineSchema({
     color: v.string(), // Hex color
     inputCount: v.number(),
     outputCount: v.number(),
+    headphoneOutputCount: v.optional(v.number()), // Number of stereo HP pairs
+    aesInputCount: v.optional(v.number()), // Number of stereo AES input pairs
+    aesOutputCount: v.optional(v.number()), // Number of stereo AES output pairs
     position: v.optional(v.object({ x: v.number(), y: v.number() })),
     deviceType: v.optional(v.union(v.literal("stagebox"), v.literal("generic"))), // default: stagebox
     portsPerRow: v.optional(v.number()), // default 12 for stagebox grid view
@@ -51,6 +54,15 @@ export default defineSchema({
     type: v.union(v.literal("input"), v.literal("output")),
     portNumber: v.number(),
     label: v.string(), // e.g. "IOX-D-I1"
+    subType: v.optional(v.union(
+      v.literal("regular"),
+      v.literal("headphone_left"),
+      v.literal("headphone_right"),
+      v.literal("aes_left"),
+      v.literal("aes_right")
+    )),
+    headphoneNumber: v.optional(v.number()), // Which HP pair (1, 2, 3...)
+    aesNumber: v.optional(v.number()), // Which AES pair (1, 2, 3...)
   })
     .index("by_ioDevice", ["ioDeviceId"])
     .index("by_ioDevice_and_type", ["ioDeviceId", "type"]),
