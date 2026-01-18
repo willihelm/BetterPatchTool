@@ -69,44 +69,47 @@ export const getAvailablePorts = query({
     portType: v.union(v.literal("input"), v.literal("output")),
   },
   handler: async (ctx, args) => {
-    // Get all IO devices
-    const ioDevices = await ctx.db
-      .query("ioDevices")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+    // Fetch all data in parallel to avoid sequential queries
+    const [ioDevices, inputChannels, outputChannels] = await Promise.all([
+      ctx.db
+        .query("ioDevices")
+        .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+        .collect(),
+      ctx.db
+        .query("inputChannels")
+        .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+        .collect(),
+      ctx.db
+        .query("outputChannels")
+        .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+        .collect(),
+    ]);
 
-    // Get port usage map
-    const inputChannels = await ctx.db
-      .query("inputChannels")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
-
-    const outputChannels = await ctx.db
-      .query("outputChannels")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
-
+    // Build used ports set
     const usedPorts = new Set<string>();
-
     for (const channel of inputChannels) {
       if (channel.ioPortId) usedPorts.add(channel.ioPortId);
       if (channel.ioPortIdRight) usedPorts.add(channel.ioPortIdRight);
     }
-
     for (const channel of outputChannels) {
       if (channel.ioPortId) usedPorts.add(channel.ioPortId);
     }
 
-    // Build grouped result
-    const result = [];
+    // Fetch ALL ports for all devices in ONE query, then filter/group in JS
+    const allPorts = await Promise.all(
+      ioDevices.map((device) =>
+        ctx.db
+          .query("ioPorts")
+          .withIndex("by_ioDevice_and_type", (q) =>
+            q.eq("ioDeviceId", device._id).eq("type", args.portType)
+          )
+          .collect()
+      )
+    );
 
-    for (const device of ioDevices) {
-      const ports = await ctx.db
-        .query("ioPorts")
-        .withIndex("by_ioDevice_and_type", (q) =>
-          q.eq("ioDeviceId", device._id).eq("type", args.portType)
-        )
-        .collect();
+    // Build grouped result
+    const result = ioDevices.map((device, index) => {
+      const ports = allPorts[index];
 
       // Sort ports: regular first, then headphones, then AES (by portNumber within each group)
       const sortedPorts = ports.sort((a, b) => {
@@ -127,7 +130,7 @@ export const getAvailablePorts = query({
         return a.portNumber - b.portNumber;
       });
 
-      result.push({
+      return {
         device: {
           _id: device._id,
           name: device.name,
@@ -138,8 +141,8 @@ export const getAvailablePorts = query({
           ...port,
           isUsed: usedPorts.has(port._id),
         })),
-      });
-    }
+      };
+    });
 
     return result;
   },

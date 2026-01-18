@@ -21,14 +21,20 @@ export const listWithPorts = query({
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
 
-    const result = [];
-    for (const device of ioDevices) {
-      const ports = await ctx.db
-        .query("ioPorts")
-        .withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", device._id))
-        .collect();
+    // Fetch all ports in parallel instead of sequentially
+    const allPortsArrays = await Promise.all(
+      ioDevices.map((device) =>
+        ctx.db
+          .query("ioPorts")
+          .withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", device._id))
+          .collect()
+      )
+    );
 
-      result.push({
+    // Map devices to their ports
+    return ioDevices.map((device, index) => {
+      const ports = allPortsArrays[index];
+      return {
         ...device,
         inputPorts: ports
           .filter((p) => p.type === "input" && (!p.subType || p.subType === "regular"))
@@ -45,10 +51,8 @@ export const listWithPorts = query({
         aesOutputPorts: ports
           .filter((p) => p.type === "output" && (p.subType === "aes_left" || p.subType === "aes_right"))
           .sort((a, b) => a.portNumber - b.portNumber),
-      });
-    }
-
-    return result;
+      };
+    });
   },
 });
 
@@ -94,23 +98,24 @@ export const listAllPorts = query({
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
 
-    const result = [];
-    for (const ioDevice of ioDevices) {
-      const ports = await ctx.db
-        .query("ioPorts")
-        .withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", ioDevice._id))
-        .collect();
+    // Fetch all ports in parallel
+    const allPortsArrays = await Promise.all(
+      ioDevices.map((ioDevice) =>
+        ctx.db
+          .query("ioPorts")
+          .withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", ioDevice._id))
+          .collect()
+      )
+    );
 
-      for (const port of ports) {
-        result.push({
-          ...port,
-          ioDeviceName: ioDevice.name,
-          ioDeviceColor: ioDevice.color,
-        });
-      }
-    }
-
-    return result;
+    // Flatten and enrich with device info
+    return ioDevices.flatMap((ioDevice, index) =>
+      allPortsArrays[index].map((port) => ({
+        ...port,
+        ioDeviceName: ioDevice.name,
+        ioDeviceColor: ioDevice.color,
+      }))
+    );
   },
 });
 
