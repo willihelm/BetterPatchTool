@@ -18,10 +18,18 @@ interface StageboxGridProps {
   isAes?: boolean;
 }
 
+// Mobile-responsive column count based on configured portsPerRow
+function getMobileColumns(portsPerRow: number): number {
+  // On mobile, show 4 columns max for readability
+  return Math.min(portsPerRow, 4);
+}
+
 export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadphone = false, isAes = false }: StageboxGridProps) {
   if (ports.length === 0) {
     return null;
   }
+
+  const mobileColumns = getMobileColumns(portsPerRow);
 
   // For headphone ports, group into stereo pairs (L/R)
   if (isHeadphone) {
@@ -49,26 +57,26 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
 
     return (
       <div className="mb-6">
-        {/* Device header */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <h4 className="font-medium">{device.name} ({device.shortName})</h4>
-            <span className="text-sm text-muted-foreground">
-              - {pairs.length} Headphone {pairs.length === 1 ? "Pair" : "Pairs"}
+        {/* Device header - responsive for mobile */}
+        <div className="flex items-center justify-between mb-2 gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+            <h4 className="font-medium text-sm sm:text-base">{device.name}</h4>
+            <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+              ({device.shortName}) - {pairs.length} HP {pairs.length === 1 ? "Pair" : "Pairs"}
             </span>
           </div>
           <div
-            className="w-16 h-2 rounded"
+            className="w-8 sm:w-16 h-2 rounded flex-shrink-0"
             style={{ backgroundColor: device.color }}
           />
         </div>
 
-        {/* Headphone pairs grid */}
-        <div className="border rounded-lg overflow-hidden">
+        {/* Headphone pairs grid - responsive with horizontal scroll on mobile */}
+        <div className="border rounded-lg overflow-x-auto">
           <div
-            className="grid"
+            className="grid min-w-fit"
             style={{
-              gridTemplateColumns: `repeat(${Math.min(pairs.length, 4)}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${Math.min(pairs.length, 2)}, minmax(140px, 1fr))`,
             }}
           >
             {pairs.map((pair) => {
@@ -77,21 +85,21 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
               return (
                 <div
                   key={pair.number}
-                  className="border-r last:border-r-0 border-b last:border-b-0 p-2"
+                  className="border-r last:border-r-0 border-b last:border-b-0 p-2 sm:p-3"
                   style={{
                     borderLeftWidth: 3,
                     borderLeftColor: device.color,
                   }}
                 >
-                  <div className="text-xs font-mono text-muted-foreground mb-1">
+                  <div className="text-xs sm:text-sm font-mono text-muted-foreground mb-1">
                     HP{pair.number}
                   </div>
                   <div className="grid grid-cols-2 gap-1">
                     {/* Left channel */}
-                    <div className="text-center p-1 bg-muted/30 rounded">
+                    <div className="text-center p-1 sm:p-1.5 bg-muted/30 rounded">
                       <div className="text-xs text-muted-foreground">L</div>
                       <div
-                        className={`text-xs truncate ${
+                        className={`text-xs sm:text-sm truncate ${
                           leftUsage ? "text-foreground font-medium" : "text-muted-foreground/50"
                         }`}
                         title={leftUsage?.channelName}
@@ -100,10 +108,10 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
                       </div>
                     </div>
                     {/* Right channel */}
-                    <div className="text-center p-1 bg-muted/30 rounded">
+                    <div className="text-center p-1 sm:p-1.5 bg-muted/30 rounded">
                       <div className="text-xs text-muted-foreground">R</div>
                       <div
-                        className={`text-xs truncate ${
+                        className={`text-xs sm:text-sm truncate ${
                           rightUsage ? "text-foreground font-medium" : "text-muted-foreground/50"
                         }`}
                         title={rightUsage?.channelName}
@@ -151,26 +159,26 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
 
     return (
       <div className="mb-6">
-        {/* Device header */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <h4 className="font-medium">{device.name} ({device.shortName})</h4>
-            <span className="text-sm text-muted-foreground">
-              - {pairs.length} AES {isInput ? "Input" : "Output"} {pairs.length === 1 ? "Pair" : "Pairs"}
+        {/* Device header - responsive for mobile */}
+        <div className="flex items-center justify-between mb-2 gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+            <h4 className="font-medium text-sm sm:text-base">{device.name}</h4>
+            <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+              ({device.shortName}) - {pairs.length} {labelPrefix} {pairs.length === 1 ? "Pair" : "Pairs"}
             </span>
           </div>
           <div
-            className="w-16 h-2 rounded"
+            className="w-8 sm:w-16 h-2 rounded flex-shrink-0"
             style={{ backgroundColor: device.color }}
           />
         </div>
 
-        {/* AES pairs grid */}
-        <div className="border rounded-lg overflow-hidden">
+        {/* AES pairs grid - responsive with horizontal scroll on mobile */}
+        <div className="border rounded-lg overflow-x-auto">
           <div
-            className="grid"
+            className="grid min-w-fit"
             style={{
-              gridTemplateColumns: `repeat(${Math.min(pairs.length, 4)}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${Math.min(pairs.length, 2)}, minmax(140px, 1fr))`,
             }}
           >
             {pairs.map((pair) => {
@@ -179,21 +187,21 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
               return (
                 <div
                   key={pair.number}
-                  className="border-r last:border-r-0 border-b last:border-b-0 p-2"
+                  className="border-r last:border-r-0 border-b last:border-b-0 p-2 sm:p-3"
                   style={{
                     borderLeftWidth: 3,
                     borderLeftColor: device.color,
                   }}
                 >
-                  <div className="text-xs font-mono text-muted-foreground mb-1">
+                  <div className="text-xs sm:text-sm font-mono text-muted-foreground mb-1">
                     {labelPrefix}{pair.number}
                   </div>
                   <div className="grid grid-cols-2 gap-1">
                     {/* Left channel */}
-                    <div className="text-center p-1 bg-muted/30 rounded">
+                    <div className="text-center p-1 sm:p-1.5 bg-muted/30 rounded">
                       <div className="text-xs text-muted-foreground">L</div>
                       <div
-                        className={`text-xs truncate ${
+                        className={`text-xs sm:text-sm truncate ${
                           leftUsage ? "text-foreground font-medium" : "text-muted-foreground/50"
                         }`}
                         title={leftUsage?.channelName}
@@ -202,10 +210,10 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
                       </div>
                     </div>
                     {/* Right channel */}
-                    <div className="text-center p-1 bg-muted/30 rounded">
+                    <div className="text-center p-1 sm:p-1.5 bg-muted/30 rounded">
                       <div className="text-xs text-muted-foreground">R</div>
                       <div
-                        className={`text-xs truncate ${
+                        className={`text-xs sm:text-sm truncate ${
                           rightUsage ? "text-foreground font-medium" : "text-muted-foreground/50"
                         }`}
                         title={rightUsage?.channelName}
@@ -223,30 +231,85 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
     );
   }
 
-  // Split ports into rows
+  // Split ports into rows - use mobile-friendly column count on small screens
+  // We'll render with CSS-based responsive columns
   const rows: IOPort[][] = [];
   for (let i = 0; i < ports.length; i += portsPerRow) {
     rows.push(ports.slice(i, i + portsPerRow));
   }
 
+  // For mobile, we'll also create rows with fewer columns
+  const mobileRows: IOPort[][] = [];
+  for (let i = 0; i < ports.length; i += mobileColumns) {
+    mobileRows.push(ports.slice(i, i + mobileColumns));
+  }
+
   return (
     <div className="mb-6">
-      {/* Device header */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <h4 className="font-medium">{device.name} ({device.shortName})</h4>
-          <span className="text-sm text-muted-foreground">
-            - {ports.length} {ports[0]?.type === "input" ? "Inputs" : "Outputs"}
+      {/* Device header - responsive for mobile */}
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+          <h4 className="font-medium text-sm sm:text-base">{device.name}</h4>
+          <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+            ({device.shortName}) - {ports.length} {ports[0]?.type === "input" ? "Inputs" : "Outputs"}
           </span>
         </div>
         <div
-          className="w-16 h-2 rounded"
+          className="w-8 sm:w-16 h-2 rounded flex-shrink-0"
           style={{ backgroundColor: device.color }}
         />
       </div>
 
-      {/* Port grid */}
-      <div className="border rounded-lg overflow-hidden">
+      {/* Mobile port grid - visible on small screens */}
+      <div className="border rounded-lg overflow-hidden sm:hidden">
+        {mobileRows.map((row, rowIndex) => (
+          <div
+            key={rowIndex}
+            className="grid border-b last:border-b-0"
+            style={{
+              gridTemplateColumns: `repeat(${mobileColumns}, minmax(0, 1fr))`,
+            }}
+          >
+            {row.map((port) => {
+              const usage = portUsageMap[port._id];
+              const isFirstInRow = (port.portNumber - 1) % mobileColumns === 0;
+              return (
+                <div
+                  key={port._id}
+                  className="border-r last:border-r-0 p-2 min-w-0"
+                  style={{
+                    borderLeftWidth: isFirstInRow ? 3 : undefined,
+                    borderLeftColor: isFirstInRow ? device.color : undefined,
+                  }}
+                >
+                  <div className="text-xs font-mono text-muted-foreground truncate">
+                    {port.label}
+                  </div>
+                  <div
+                    className={`text-sm truncate ${
+                      usage ? "text-foreground font-medium" : "text-muted-foreground/50"
+                    }`}
+                    title={usage?.channelName}
+                  >
+                    {usage?.channelName || "—"}
+                  </div>
+                </div>
+              );
+            })}
+            {/* Fill empty cells in last row */}
+            {row.length < mobileColumns &&
+              Array.from({ length: mobileColumns - row.length }).map((_, i) => (
+                <div
+                  key={`empty-${i}`}
+                  className="border-r last:border-r-0 p-2 bg-muted/30"
+                />
+              ))}
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop port grid - hidden on small screens */}
+      <div className="border rounded-lg overflow-hidden hidden sm:block">
         {rows.map((row, rowIndex) => (
           <div
             key={rowIndex}

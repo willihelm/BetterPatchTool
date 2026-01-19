@@ -54,12 +54,12 @@ export function StageboxOverview({ projectId }: StageboxOverviewProps) {
   const devicesWithAesOutputs = stageboxDevices.filter((d) => d.aesOutputPorts && d.aesOutputPorts.length > 0);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8 px-1 sm:px-0">
       {/* Inputs Section */}
       {devicesWithInputs.length > 0 && (
         <section>
-          <h3 className="text-lg font-medium mb-4 pb-2 border-b">
-            Stageboxes: Inputs
+          <h3 className="text-base sm:text-lg font-medium mb-3 sm:mb-4 pb-2 border-b sticky top-0 bg-background z-10">
+            Inputs
           </h3>
           {devicesWithInputs.map((device) => (
             <StageboxGrid
@@ -76,8 +76,8 @@ export function StageboxOverview({ projectId }: StageboxOverviewProps) {
       {/* Outputs Section */}
       {devicesWithOutputs.length > 0 && (
         <section>
-          <h3 className="text-lg font-medium mb-4 pb-2 border-b">
-            Stageboxes: Outputs
+          <h3 className="text-base sm:text-lg font-medium mb-3 sm:mb-4 pb-2 border-b sticky top-0 bg-background z-10">
+            Outputs
           </h3>
           {devicesWithOutputs.map((device) => (
             <StageboxGrid
@@ -94,8 +94,8 @@ export function StageboxOverview({ projectId }: StageboxOverviewProps) {
       {/* Headphone Outputs Section */}
       {devicesWithHeadphones.length > 0 && (
         <section>
-          <h3 className="text-lg font-medium mb-4 pb-2 border-b">
-            Stageboxes: Headphone Outputs
+          <h3 className="text-base sm:text-lg font-medium mb-3 sm:mb-4 pb-2 border-b sticky top-0 bg-background z-10">
+            Headphone Outputs
           </h3>
           {devicesWithHeadphones.map((device) => (
             <StageboxGrid
@@ -113,8 +113,8 @@ export function StageboxOverview({ projectId }: StageboxOverviewProps) {
       {/* AES Inputs Section */}
       {devicesWithAesInputs.length > 0 && (
         <section>
-          <h3 className="text-lg font-medium mb-4 pb-2 border-b">
-            Stageboxes: AES Inputs
+          <h3 className="text-base sm:text-lg font-medium mb-3 sm:mb-4 pb-2 border-b sticky top-0 bg-background z-10">
+            AES Inputs
           </h3>
           {devicesWithAesInputs.map((device) => (
             <StageboxGrid
@@ -132,8 +132,8 @@ export function StageboxOverview({ projectId }: StageboxOverviewProps) {
       {/* AES Outputs Section */}
       {devicesWithAesOutputs.length > 0 && (
         <section>
-          <h3 className="text-lg font-medium mb-4 pb-2 border-b">
-            Stageboxes: AES Outputs
+          <h3 className="text-base sm:text-lg font-medium mb-3 sm:mb-4 pb-2 border-b sticky top-0 bg-background z-10">
+            AES Outputs
           </h3>
           {devicesWithAesOutputs.map((device) => (
             <StageboxGrid
