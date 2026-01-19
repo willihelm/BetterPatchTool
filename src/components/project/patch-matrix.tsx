@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Check, Filter, ChevronDown } from "lucide-react";
+import { usePortData } from "./port-data-context";
 
 interface PatchMatrixProps {
   projectId: Id<"projects">;
@@ -39,10 +40,10 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   // Queries
   const inputChannels = useQuery(api.inputChannels.list, { projectId });
   const outputChannels = useQuery(api.outputChannels.list, { projectId });
-  const portGroups = useQuery(api.patching.getAvailablePorts, {
-    projectId,
-    portType: channelType,
-  });
+
+  // Get port groups from context instead of separate query
+  const { inputPortGroups, outputPortGroups, isLoading: portDataLoading } = usePortData();
+  const portGroups = channelType === "input" ? inputPortGroups : outputPortGroups;
 
   // Mutations
   const patchInputChannel = useMutation(api.patching.patchInputChannel);
@@ -332,7 +333,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
     setSelectedDeviceIds(new Set());
   }, []);
 
-  if (!channels || !portGroups) {
+  if (!channels || portDataLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-pulse text-muted-foreground">Loading matrix...</div>

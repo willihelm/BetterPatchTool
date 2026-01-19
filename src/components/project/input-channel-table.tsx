@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, memo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
@@ -57,8 +57,6 @@ function incrementTrailingNumber(value: string): string {
 
 export function InputChannelTable({ projectId }: InputChannelTableProps) {
   const channels = useQuery(api.inputChannels.list, { projectId });
-  const portGroups = useQuery(api.patching.getAvailablePorts, { projectId, portType: "input" });
-  const portUsageMap = useQuery(api.patching.getPortUsageMap, { projectId }) ?? {};
 
   const createChannel = useMutation(api.inputChannels.create);
   const updateChannel = useMutation(api.inputChannels.update);
@@ -66,8 +64,6 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
   const moveChannel = useMutation(api.inputChannels.moveChannel);
   const patchChannel = useMutation(api.patching.patchInputChannel);
 
-  const [editValue, setEditValue] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
   const [portDropdownOpen, setPortDropdownOpen] = useState<number | null>(null);
   const [autoPatchDialogOpen, setAutoPatchDialogOpen] = useState(false);
 
@@ -75,41 +71,13 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
   const channelIds = channels?.map((c) => c._id) ?? [];
   const selection = useChannelSelection({ channelIds });
 
-  // Use local state for navigation instead of hook to avoid duplicate handlers
+  // Only track which cell is active - editing state is managed by each cell
   const [activeCell, setActiveCell] = useState<{ rowIndex: number; columnId: string } | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [shouldSelectAll, setShouldSelectAll] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const selectCell = useCallback((position: { rowIndex: number; columnId: string }) => {
-    setActiveCell(position);
-    setIsEditing(false);
-  }, []);
-
-  const stopEditing = useCallback((save = true) => {
-    setIsEditing(false);
-  }, []);
-
-  const initializeNavigation = useCallback(() => {
-    if (!activeCell && channels && channels.length > 0 && ALL_COLUMNS.length > 0) {
-      setActiveCell({ rowIndex: 0, columnId: ALL_COLUMNS[0] });
-    }
-  }, [activeCell, channels]);
-
-  // Focus on input when editing starts
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
-      if (shouldSelectAll) {
-        inputRef.current.select();
-      } else {
-        // Move cursor to end when typing initiated editing
-        const len = inputRef.current.value.length;
-        inputRef.current.setSelectionRange(len, len);
-      }
-      setShouldSelectAll(false);
-    }
-  }, [isEditing, shouldSelectAll]);
+  // Use refs to hold latest values so callbacks can be stable
+  const channelsRef = useRef(channels);
+  channelsRef.current = channels;
 
   const handleAddChannel = async () => {
     await createChannel({
@@ -118,107 +86,79 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
     });
   };
 
-  const saveEdit = useCallback(async () => {
-    if (!activeCell || !channels) return;
-
-    const channel = channels[activeCell.rowIndex];
+  // Stable callback for saving cell values - uses ref so no dependency on channels
+  const handleCellSave = useCallback((rowIndex: number, columnId: string, value: string) => {
+    const channel = channelsRef.current?.[rowIndex];
     if (!channel) return;
-
-    await updateChannel({
+    updateChannel({
       channelId: channel._id,
-      [activeCell.columnId]: editValue || undefined,
+      [columnId]: value || undefined,
     });
-  }, [activeCell, channels, editValue, updateChannel]);
+  }, [updateChannel]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      e.stopPropagation();
-      saveEdit();
-      stopEditing(true);
-      // Navigate to next row (same column)
-      if (activeCell && channels) {
-        const nextRowIndex = Math.min(channels.length - 1, activeCell.rowIndex + 1);
-        selectCell({ rowIndex: nextRowIndex, columnId: activeCell.columnId });
-      }
-      containerRef.current?.focus();
-    } else if (e.key === "Tab") {
-      e.preventDefault();
-      e.stopPropagation();
-      saveEdit();
-      stopEditing(true);
-      if (activeCell) {
-        const currentColIndex = ALL_COLUMNS.indexOf(activeCell.columnId);
-        let nextColIndex = e.shiftKey ? currentColIndex - 1 : currentColIndex + 1;
-        let nextRowIndex = activeCell.rowIndex;
+  // Stable callback for cell navigation - uses ref so no dependency on channels
+  const handleCellNavigate = useCallback((rowIndex: number, columnId: string, direction: "up" | "down" | "left" | "right" | "next" | "prev") => {
+    const currentChannels = channelsRef.current;
+    if (!currentChannels) return;
+    const colIndex = ALL_COLUMNS.indexOf(columnId);
+    let nextRowIndex = rowIndex;
+    let nextColIndex = colIndex;
 
+    switch (direction) {
+      case "up":
+        nextRowIndex = Math.max(0, rowIndex - 1);
+        break;
+      case "down":
+        nextRowIndex = Math.min(currentChannels.length - 1, rowIndex + 1);
+        break;
+      case "left":
+        nextColIndex = Math.max(0, colIndex - 1);
+        break;
+      case "right":
+        nextColIndex = Math.min(ALL_COLUMNS.length - 1, colIndex + 1);
+        break;
+      case "next":
+        nextColIndex = colIndex + 1;
+        if (nextColIndex >= ALL_COLUMNS.length) {
+          nextColIndex = 0;
+          nextRowIndex = Math.min(currentChannels.length - 1, rowIndex + 1);
+        }
+        break;
+      case "prev":
+        nextColIndex = colIndex - 1;
         if (nextColIndex < 0) {
           nextColIndex = ALL_COLUMNS.length - 1;
-          nextRowIndex = Math.max(0, nextRowIndex - 1);
-        } else if (nextColIndex >= ALL_COLUMNS.length) {
-          nextColIndex = 0;
-          nextRowIndex = Math.min((channels?.length ?? 1) - 1, nextRowIndex + 1);
+          nextRowIndex = Math.max(0, rowIndex - 1);
         }
-
-        selectCell({ rowIndex: nextRowIndex, columnId: ALL_COLUMNS[nextColIndex] });
-      }
-      containerRef.current?.focus();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      stopEditing(false);
-      containerRef.current?.focus();
-    } else if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
-      e.preventDefault();
-      e.stopPropagation();
-      saveEdit();
-      stopEditing(true);
-      if (activeCell) {
-        const { rowIndex, columnId } = activeCell;
-        const colIndex = ALL_COLUMNS.indexOf(columnId);
-        let nextRowIndex = rowIndex;
-        let nextColIndex = colIndex;
-
-        switch (e.key) {
-          case "ArrowUp":
-            nextRowIndex = Math.max(0, rowIndex - 1);
-            break;
-          case "ArrowDown":
-            nextRowIndex = Math.min((channels?.length ?? 1) - 1, rowIndex + 1);
-            break;
-          case "ArrowLeft":
-            nextColIndex = Math.max(0, colIndex - 1);
-            break;
-          case "ArrowRight":
-            nextColIndex = Math.min(ALL_COLUMNS.length - 1, colIndex + 1);
-            break;
-        }
-        selectCell({ rowIndex: nextRowIndex, columnId: ALL_COLUMNS[nextColIndex] });
-      }
-      containerRef.current?.focus();
+        break;
     }
-  };
+    setActiveCell({ rowIndex: nextRowIndex, columnId: ALL_COLUMNS[nextColIndex] });
+    containerRef.current?.focus();
+  }, []);
 
-  const handleCellClick = (rowIndex: number, columnId: string) => {
-    // Start editing immediately on click
-    selectCell({ rowIndex, columnId });
-    const channel = channels?.[rowIndex];
-    if (channel) {
-      const value = channel[columnId as keyof InputChannel];
-      setEditValue(typeof value === "string" ? value : "");
-      setShouldSelectAll(true); // Select all when clicking to edit
-      setIsEditing(true);
-    }
-  };
+  // Stable callback for activating a cell
+  const handleCellActivate = useCallback((rowIndex: number, columnId: string) => {
+    setActiveCell({ rowIndex, columnId });
+  }, []);
+
+  // Stable callback for copy from above (Alt+Enter) - uses ref so no dependency on channels
+  const handleCopyFromAbove = useCallback((rowIndex: number, columnId: string): string | undefined => {
+    const currentChannels = channelsRef.current;
+    if (rowIndex <= 0 || !currentChannels) return undefined;
+    const aboveChannel = currentChannels[rowIndex - 1];
+    if (!aboveChannel) return undefined;
+    const aboveValue = aboveChannel[columnId as keyof InputChannel];
+    const valueStr = typeof aboveValue === "string" ? aboveValue : "";
+    return incrementTrailingNumber(valueStr);
+  }, []);
 
   const handleTableKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (isEditing) return; // Input handled by input element
     if (portDropdownOpen !== null) return; // Port dropdown is open
 
     if (!activeCell) {
       // If no cell is active, activate first cell on any key
       if (channels && channels.length > 0) {
-        selectCell({ rowIndex: 0, columnId: ALL_COLUMNS[0] });
+        setActiveCell({ rowIndex: 0, columnId: ALL_COLUMNS[0] });
       }
       return;
     }
@@ -227,6 +167,38 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
     const colIndex = ALL_COLUMNS.indexOf(columnId);
     const isPortColumn = columnId === "port";
 
+    // Only handle navigation for port column - EditableCell handles its own keyboard events
+    if (!isPortColumn) {
+      // Handle Alt+Arrow for moving rows
+      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        e.preventDefault();
+        const channel = channels?.[rowIndex];
+        if (channel) {
+          if (e.key === "ArrowUp" && rowIndex > 0) {
+            moveChannel({ channelId: channel._id, direction: "up" });
+            setActiveCell({ rowIndex: rowIndex - 1, columnId });
+          } else if (e.key === "ArrowDown" && rowIndex < (channels?.length ?? 1) - 1) {
+            moveChannel({ channelId: channel._id, direction: "down" });
+            setActiveCell({ rowIndex: rowIndex + 1, columnId });
+          }
+        }
+      } else if (e.altKey && e.key === "Enter") {
+        // Alt+Enter: Copy value from cell above, increment trailing number, save, and move down
+        e.preventDefault();
+        const copiedValue = handleCopyFromAbove(rowIndex, columnId);
+        if (copiedValue !== undefined) {
+          handleCellSave(rowIndex, columnId, copiedValue);
+          const nextRowIndex = Math.min((channels?.length ?? 1) - 1, rowIndex + 1);
+          setActiveCell({ rowIndex: nextRowIndex, columnId });
+        }
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setActiveCell(null);
+      }
+      return;
+    }
+
+    // Port column keyboard handling
     switch (e.key) {
       case "ArrowUp":
         e.preventDefault();
@@ -234,10 +206,10 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
           const channel = channels?.[rowIndex];
           if (channel && rowIndex > 0) {
             moveChannel({ channelId: channel._id, direction: "up" });
-            selectCell({ rowIndex: rowIndex - 1, columnId });
+            setActiveCell({ rowIndex: rowIndex - 1, columnId });
           }
         } else {
-          selectCell({ rowIndex: Math.max(0, rowIndex - 1), columnId });
+          setActiveCell({ rowIndex: Math.max(0, rowIndex - 1), columnId });
         }
         break;
       case "ArrowDown":
@@ -246,23 +218,22 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
           const channel = channels?.[rowIndex];
           if (channel && rowIndex < (channels?.length ?? 1) - 1) {
             moveChannel({ channelId: channel._id, direction: "down" });
-            selectCell({ rowIndex: rowIndex + 1, columnId });
+            setActiveCell({ rowIndex: rowIndex + 1, columnId });
           }
         } else {
-          selectCell({ rowIndex: Math.min((channels?.length ?? 1) - 1, rowIndex + 1), columnId });
+          setActiveCell({ rowIndex: Math.min((channels?.length ?? 1) - 1, rowIndex + 1), columnId });
         }
         break;
       case "ArrowLeft":
         e.preventDefault();
-        selectCell({ rowIndex, columnId: ALL_COLUMNS[Math.max(0, colIndex - 1)] });
+        setActiveCell({ rowIndex, columnId: ALL_COLUMNS[Math.max(0, colIndex - 1)] });
         break;
       case "ArrowRight":
         e.preventDefault();
-        selectCell({ rowIndex, columnId: ALL_COLUMNS[Math.min(ALL_COLUMNS.length - 1, colIndex + 1)] });
+        setActiveCell({ rowIndex, columnId: ALL_COLUMNS[Math.min(ALL_COLUMNS.length - 1, colIndex + 1)] });
         break;
       case "Tab":
         e.preventDefault();
-        e.stopPropagation();
         {
           let nextColIndex = e.shiftKey ? colIndex - 1 : colIndex + 1;
           let nextRowIndex = rowIndex;
@@ -273,92 +244,22 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
             nextColIndex = 0;
             nextRowIndex = Math.min((channels?.length ?? 1) - 1, rowIndex + 1);
           }
-          selectCell({ rowIndex: nextRowIndex, columnId: ALL_COLUMNS[nextColIndex] });
-        }
-        break;
-      case "Enter":
-        e.preventDefault();
-        if (isPortColumn) {
-          // Port column: Enter opens the dropdown (handled by PortSelectCell)
-          // Just let the event bubble - PortSelectCell will handle it
-          break;
-        }
-        if (e.altKey) {
-          // Alt+Enter: Copy value from cell above, increment trailing number, save, and move down
-          const aboveChannel = channels?.[rowIndex - 1];
-          const currentChannel = channels?.[rowIndex];
-          if (aboveChannel && currentChannel && rowIndex > 0) {
-            const aboveValue = aboveChannel[columnId as keyof InputChannel];
-            const valueStr = typeof aboveValue === "string" ? aboveValue : "";
-            const newValue = incrementTrailingNumber(valueStr);
-            // Save immediately and move to next row
-            updateChannel({
-              channelId: currentChannel._id,
-              [columnId]: newValue || undefined,
-            });
-            const nextRowIndex = Math.min((channels?.length ?? 1) - 1, rowIndex + 1);
-            selectCell({ rowIndex: nextRowIndex, columnId });
-          }
-        } else {
-          const channel = channels?.[rowIndex];
-          if (channel) {
-            const value = channel[columnId as keyof InputChannel];
-            setEditValue(typeof value === "string" ? value : "");
-            setShouldSelectAll(true);
-            setIsEditing(true);
-          }
-        }
-        break;
-      case "F2":
-        e.preventDefault();
-        if (isPortColumn) {
-          // Port column: F2 opens the dropdown (handled by PortSelectCell)
-          break;
-        }
-        {
-          const channel = channels?.[rowIndex];
-          if (channel) {
-            const value = channel[columnId as keyof InputChannel];
-            setEditValue(typeof value === "string" ? value : "");
-            setShouldSelectAll(true); // Select all when using Enter/F2
-            setIsEditing(true);
-          }
+          setActiveCell({ rowIndex: nextRowIndex, columnId: ALL_COLUMNS[nextColIndex] });
         }
         break;
       case "Delete":
       case "Backspace":
         e.preventDefault();
-        if (isPortColumn) {
-          // Port column: Clear port assignment
-          const channel = channels?.[rowIndex];
-          if (channel) {
-            handlePortSelect(channel._id, null);
-          }
-          break;
-        }
         {
           const channel = channels?.[rowIndex];
           if (channel) {
-            // Clear cell immediately and save (use empty string, not undefined)
-            updateChannel({
-              channelId: channel._id,
-              [columnId]: "",
-            });
+            handlePortSelect(channel._id, null);
           }
         }
         break;
       case "Escape":
         e.preventDefault();
-        setActiveCell(null); // Deselect
-        break;
-      default:
-        // Alphanumeric input starts editing (only for text columns)
-        if (!isPortColumn && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          e.preventDefault();
-          setEditValue(e.key);
-          setShouldSelectAll(false); // Don't select - keep the typed character
-          setIsEditing(true);
-        }
+        setActiveCell(null);
         break;
     }
   };
@@ -437,7 +338,11 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
         className="border rounded-lg overflow-hidden focus:outline-none"
         tabIndex={0}
         onKeyDown={handleTableKeyDown}
-        onFocus={initializeNavigation}
+        onFocus={() => {
+          if (!activeCell && channels && channels.length > 0) {
+            setActiveCell({ rowIndex: 0, columnId: ALL_COLUMNS[0] });
+          }
+        }}
       >
         <Table>
           <TableHeader>
@@ -504,12 +409,11 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
                   </TableCell>
                   <PortSelectCell
                     value={channel.ioPortId}
-                    portGroups={portGroups ?? []}
-                    portUsageMap={portUsageMap}
+                    portType="input"
                     currentChannelId={channel._id}
                     isActive={isCellActive(rowIndex, "port")}
                     onSelect={(portId) => handlePortSelect(channel._id, portId)}
-                    onCellClick={() => selectCell({ rowIndex, columnId: "port" })}
+                    onCellClick={() => setActiveCell({ rowIndex, columnId: "port" })}
                     onOpenChange={(open) => setPortDropdownOpen(open ? rowIndex : null)}
                   />
 
@@ -519,16 +423,11 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
                       key={columnId}
                       value={channel[columnId as keyof InputChannel] as string | undefined}
                       isActive={isCellActive(rowIndex, columnId)}
-                      isEditing={isCellActive(rowIndex, columnId) && isEditing}
-                      editValue={editValue}
-                      inputRef={isCellActive(rowIndex, columnId) ? inputRef : undefined}
-                      onClick={() => handleCellClick(rowIndex, columnId)}
-                      onValueChange={setEditValue}
-                      onKeyDown={handleKeyDown}
-                      onBlur={() => {
-                        saveEdit();
-                        stopEditing(true);
-                      }}
+                      rowIndex={rowIndex}
+                      columnId={columnId}
+                      onSave={handleCellSave}
+                      onNavigate={handleCellNavigate}
+                      onActivate={handleCellActivate}
                     />
                   ))}
 
@@ -600,26 +499,122 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
 interface EditableCellProps {
   value: string | undefined;
   isActive: boolean;
-  isEditing: boolean;
-  editValue: string;
-  inputRef?: React.RefObject<HTMLInputElement | null>;
-  onClick: () => void;
-  onValueChange: (value: string) => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-  onBlur: () => void;
+  rowIndex: number;
+  columnId: string;
+  onSave: (rowIndex: number, columnId: string, value: string) => void;
+  onNavigate: (rowIndex: number, columnId: string, direction: "up" | "down" | "left" | "right" | "next" | "prev") => void;
+  onActivate: (rowIndex: number, columnId: string) => void;
 }
 
-function EditableCell({
+const EditableCell = memo(function EditableCell({
   value,
   isActive,
-  isEditing,
-  editValue,
-  inputRef,
-  onClick,
-  onValueChange,
-  onKeyDown,
-  onBlur,
+  rowIndex,
+  columnId,
+  onSave,
+  onNavigate,
+  onActivate,
 }: EditableCellProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  // Handle external activation (keyboard nav to this cell while it should edit)
+  useEffect(() => {
+    if (!isActive && isEditing) {
+      // Lost focus, save and stop editing
+      onSave(rowIndex, columnId, editValue);
+      setIsEditing(false);
+    }
+  }, [isActive, isEditing, editValue, rowIndex, columnId, onSave]);
+
+  const startEditing = useCallback((initialValue?: string) => {
+    setEditValue(initialValue ?? value ?? "");
+    setIsEditing(true);
+  }, [value]);
+
+  const handleClick = useCallback(() => {
+    onActivate(rowIndex, columnId);
+    startEditing();
+  }, [rowIndex, columnId, onActivate, startEditing]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    switch (e.key) {
+      case "Enter":
+        e.preventDefault();
+        onSave(rowIndex, columnId, editValue);
+        setIsEditing(false);
+        onNavigate(rowIndex, columnId, "down");
+        break;
+      case "Tab":
+        e.preventDefault();
+        onSave(rowIndex, columnId, editValue);
+        setIsEditing(false);
+        onNavigate(rowIndex, columnId, e.shiftKey ? "prev" : "next");
+        break;
+      case "Escape":
+        e.preventDefault();
+        setIsEditing(false);
+        setEditValue(value ?? "");
+        break;
+      case "ArrowUp":
+      case "ArrowDown":
+      case "ArrowLeft":
+      case "ArrowRight":
+        e.preventDefault();
+        onSave(rowIndex, columnId, editValue);
+        setIsEditing(false);
+        onNavigate(rowIndex, columnId, e.key.replace("Arrow", "").toLowerCase() as "up" | "down" | "left" | "right");
+        break;
+    }
+  }, [rowIndex, columnId, editValue, value, onSave, onNavigate]);
+
+  const handleBlur = useCallback(() => {
+    onSave(rowIndex, columnId, editValue);
+    setIsEditing(false);
+  }, [rowIndex, columnId, editValue, onSave]);
+
+  // Handle keyboard events when cell is active but not editing
+  useEffect(() => {
+    if (!isActive || isEditing) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Alt+Enter is handled by parent component
+      if (e.altKey) return;
+
+      switch (e.key) {
+        case "Enter":
+        case "F2":
+          e.preventDefault();
+          startEditing();
+          break;
+        case "Delete":
+        case "Backspace":
+          e.preventDefault();
+          onSave(rowIndex, columnId, "");
+          break;
+        default:
+          // Start editing on alphanumeric input
+          if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            startEditing(e.key);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isActive, isEditing, rowIndex, columnId, startEditing, onSave]);
+
   return (
     <TableCell
       className={`cursor-pointer transition-colors ${
@@ -627,16 +622,15 @@ function EditableCell({
           ? "ring-2 ring-primary ring-inset bg-primary/5"
           : "hover:bg-muted/50"
       }`}
-      onClick={onClick}
+      onClick={handleClick}
     >
       {isEditing ? (
         <Input
           ref={inputRef}
-          autoFocus
           value={editValue}
-          onChange={(e) => onValueChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          onBlur={onBlur}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
           className="h-7 text-sm -my-1"
         />
       ) : (
@@ -646,4 +640,4 @@ function EditableCell({
       )}
     </TableCell>
   );
-}
+});

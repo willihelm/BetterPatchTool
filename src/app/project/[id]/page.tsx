@@ -16,6 +16,7 @@ import { IOOverview } from "@/components/project/io-overview";
 import { MixerSettingsDialog } from "@/components/project/mixer-settings-dialog";
 import { PatchMatrix } from "@/components/project/patch-matrix";
 import { StageboxOverview } from "@/components/project/stagebox-overview";
+import { PortDataProvider } from "@/components/project/port-data-context";
 import type { Project, Mixer } from "@/types/convex";
 
 export default function ProjectPage() {
@@ -104,35 +105,37 @@ export default function ProjectPage() {
 
       {/* Main Content */}
       <main className="flex-1 container mx-auto px-4 py-4">
-        <Tabs defaultValue="inputs" className="h-full">
-          <TabsList className="mb-4">
-            <TabsTrigger value="inputs">Input Patch List</TabsTrigger>
-            <TabsTrigger value="outputs">Output Patch List</TabsTrigger>
-            <TabsTrigger value="matrix">Patch Matrix</TabsTrigger>
-            <TabsTrigger value="stageboxes">Stageboxes</TabsTrigger>
-            <TabsTrigger value="io-devices">IO Devices</TabsTrigger>
-          </TabsList>
+        <PortDataProvider projectId={projectId}>
+          <Tabs defaultValue="inputs" className="h-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="inputs">Input Patch List</TabsTrigger>
+              <TabsTrigger value="outputs">Output Patch List</TabsTrigger>
+              <TabsTrigger value="matrix">Patch Matrix</TabsTrigger>
+              <TabsTrigger value="stageboxes">Stageboxes</TabsTrigger>
+              <TabsTrigger value="io-devices">IO Devices</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="inputs" className="mt-0">
-            <InputChannelTable projectId={projectId} />
-          </TabsContent>
+            <TabsContent value="inputs" className="mt-0">
+              <InputChannelTable projectId={projectId} />
+            </TabsContent>
 
-          <TabsContent value="outputs" className="mt-0">
-            <OutputChannelTable projectId={projectId} />
-          </TabsContent>
+            <TabsContent value="outputs" className="mt-0">
+              <OutputChannelTable projectId={projectId} />
+            </TabsContent>
 
-          <TabsContent value="matrix" className="mt-0">
-            <PatchMatrix projectId={projectId} />
-          </TabsContent>
+            <TabsContent value="matrix" className="mt-0">
+              <PatchMatrix projectId={projectId} />
+            </TabsContent>
 
-          <TabsContent value="stageboxes" className="mt-0">
-            <StageboxOverview projectId={projectId} />
-          </TabsContent>
+            <TabsContent value="stageboxes" className="mt-0">
+              <StageboxOverview projectId={projectId} />
+            </TabsContent>
 
-          <TabsContent value="io-devices" className="mt-0">
-            <IOOverview projectId={projectId} />
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="io-devices" className="mt-0">
+              <IOOverview projectId={projectId} />
+            </TabsContent>
+          </Tabs>
+        </PortDataProvider>
       </main>
     </div>
   );

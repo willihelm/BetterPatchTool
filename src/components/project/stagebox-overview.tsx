@@ -6,6 +6,7 @@ import { Id } from "../../../convex/_generated/dataModel";
 import { StageboxGrid } from "./stagebox-grid";
 import { Card, CardContent } from "@/components/ui/card";
 import { Box } from "lucide-react";
+import { usePortData } from "./port-data-context";
 
 interface StageboxOverviewProps {
   projectId: Id<"projects">;
@@ -13,9 +14,10 @@ interface StageboxOverviewProps {
 
 export function StageboxOverview({ projectId }: StageboxOverviewProps) {
   const devicesWithPorts = useQuery(api.ioDevices.listWithPorts, { projectId });
-  const portUsageMap = useQuery(api.patching.getPortUsageMap, { projectId });
+  // Get port usage map from context instead of separate query
+  const { portUsageMap, isLoading: portDataLoading } = usePortData();
 
-  if (devicesWithPorts === undefined || portUsageMap === undefined) {
+  if (devicesWithPorts === undefined || portDataLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-pulse text-muted-foreground">Loading stageboxes...</div>

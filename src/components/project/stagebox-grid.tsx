@@ -43,7 +43,7 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
     }
 
     for (const [number, pair] of portsByNumber.entries()) {
-      pairs.push({ ...pair, number });
+      pairs.push({ left: pair.left, right: pair.right, number });
     }
     pairs.sort((a, b) => a.number - b.number);
 
@@ -141,7 +141,7 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
     }
 
     for (const [number, pair] of portsByNumber.entries()) {
-      pairs.push({ ...pair, number });
+      pairs.push({ left: pair.left, right: pair.right, number });
     }
     pairs.sort((a, b) => a.number - b.number);
 

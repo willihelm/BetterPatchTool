@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, memo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
@@ -56,8 +56,6 @@ function incrementTrailingNumber(value: string): string {
 
 export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
   const channels = useQuery(api.outputChannels.list, { projectId });
-  const portGroups = useQuery(api.patching.getAvailablePorts, { projectId, portType: "output" });
-  const portUsageMap = useQuery(api.patching.getPortUsageMap, { projectId }) ?? {};
 
   const createChannel = useMutation(api.outputChannels.create);
   const updateChannel = useMutation(api.outputChannels.update);
@@ -492,8 +490,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
                   </TableCell>
                   <PortSelectCell
                     value={channel.ioPortId}
-                    portGroups={portGroups ?? []}
-                    portUsageMap={portUsageMap}
+                    portType="output"
                     currentChannelId={channel._id}
                     isActive={isCellActive(rowIndex, "port")}
                     onSelect={(portId) => handlePortSelect(channel._id, portId)}
@@ -584,7 +581,7 @@ interface EditableCellProps {
   onBlur: () => void;
 }
 
-function EditableCell({
+const EditableCell = memo(function EditableCell({
   value,
   isActive,
   isEditing,
@@ -621,4 +618,4 @@ function EditableCell({
       )}
     </TableCell>
   );
-}
+});

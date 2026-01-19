@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -14,33 +14,11 @@ import {
 } from "@/components/ui/select";
 import { TableCell } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-
-interface PortGroup {
-  device: {
-    _id: string;
-    name: string;
-    shortName: string;
-    color: string;
-  };
-  ports: Array<{
-    _id: string;
-    label: string;
-    portNumber: number;
-    isUsed: boolean;
-  }>;
-}
-
-interface PortUsage {
-  channelType: "input" | "output";
-  channelId: string;
-  channelName: string;
-  channelNumber: number;
-}
+import { usePortData } from "./port-data-context";
 
 interface PortSelectCellProps {
   value: string | undefined;
-  portGroups: PortGroup[];
-  portUsageMap: Record<string, PortUsage>;
+  portType: "input" | "output";
   currentChannelId: string;
   isActive: boolean;
   onSelect: (portId: string | null) => void;
@@ -48,10 +26,9 @@ interface PortSelectCellProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-export function PortSelectCell({
+export const PortSelectCell = memo(function PortSelectCell({
   value,
-  portGroups,
-  portUsageMap,
+  portType,
   currentChannelId,
   isActive,
   onSelect,
@@ -61,12 +38,14 @@ export function PortSelectCell({
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // Find current port info for display
-  const currentPort = value
-    ? portGroups
-        .flatMap((g) => g.ports.map((p) => ({ ...p, device: g.device })))
-        .find((p) => p._id === value)
-    : null;
+  // Get data from context - only loaded once for the entire project
+  const { portInfoMap, portUsageMap, inputPortGroups, outputPortGroups } = usePortData();
+
+  // Get the port groups based on type
+  const portGroups = portType === "input" ? inputPortGroups : outputPortGroups;
+
+  // Get current port info for display (lightweight lookup)
+  const currentPortInfo = value ? portInfoMap[value] : null;
 
   // Handle open state changes
   const handleOpenChange = (open: boolean) => {
@@ -128,16 +107,16 @@ export function PortSelectCell({
           )}
         >
           <SelectValue>
-            {currentPort ? (
+            {currentPortInfo ? (
               <Badge
                 variant="outline"
                 className="font-mono"
                 style={{
-                  borderColor: currentPort.device.color,
-                  color: currentPort.device.color,
+                  borderColor: currentPortInfo.deviceColor,
+                  color: currentPortInfo.deviceColor,
                 }}
               >
-                {currentPort.label}
+                {currentPortInfo.label}
               </Badge>
             ) : (
               <span className="text-muted-foreground">-</span>
@@ -186,4 +165,4 @@ export function PortSelectCell({
       </Select>
     </TableCell>
   );
-}
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { usePortData } from "./port-data-context";
 
 interface AutoPatchDialogProps {
   open: boolean;
@@ -36,7 +37,6 @@ interface AutoPatchDialogProps {
 export function AutoPatchDialog({
   open,
   onOpenChange,
-  projectId,
   channelType,
   selectedChannelIds,
   onComplete,
@@ -45,11 +45,9 @@ export function AutoPatchDialog({
   const [skipAssigned, setSkipAssigned] = useState(true);
   const [isPatching, setIsPatching] = useState(false);
 
-  const portType = channelType === "input" ? "input" : "output";
-  const portGroups = useQuery(api.patching.getAvailablePorts, {
-    projectId,
-    portType,
-  });
+  // Get port groups from context instead of separate query
+  const { inputPortGroups, outputPortGroups } = usePortData();
+  const portGroups = channelType === "input" ? inputPortGroups : outputPortGroups;
 
   const autoPatchInputs = useMutation(api.patching.autoPatchInputChannels);
   const autoPatchOutputs = useMutation(api.patching.autoPatchOutputChannels);

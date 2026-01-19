@@ -2,6 +2,180 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 
+// Combined query that returns all patching data in a single call
+// This reduces the number of DB queries and avoids fetching the same data multiple times
+export const getAllPatchingData = query({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, args) => {
+    // Fetch all data in parallel to minimize latency
+    const [ioDevices, inputChannels, outputChannels] = await Promise.all([
+      ctx.db
+        .query("ioDevices")
+        .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+        .collect(),
+      ctx.db
+        .query("inputChannels")
+        .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+        .collect(),
+      ctx.db
+        .query("outputChannels")
+        .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+        .collect(),
+    ]);
+
+    // Build used ports set for marking usage
+    const usedPorts = new Set<string>();
+    for (const channel of inputChannels) {
+      if (channel.ioPortId) usedPorts.add(channel.ioPortId);
+      if (channel.ioPortIdRight) usedPorts.add(channel.ioPortIdRight);
+    }
+    for (const channel of outputChannels) {
+      if (channel.ioPortId) usedPorts.add(channel.ioPortId);
+    }
+
+    // Build port usage map
+    const portUsageMap: Record<
+      string,
+      {
+        channelType: "input" | "output";
+        channelId: string;
+        channelName: string;
+        channelNumber: number;
+      }
+    > = {};
+
+    for (const channel of inputChannels) {
+      if (channel.ioPortId) {
+        portUsageMap[channel.ioPortId] = {
+          channelType: "input",
+          channelId: channel._id,
+          channelName: channel.source || `Ch ${channel.channelNumber}`,
+          channelNumber: channel.channelNumber,
+        };
+      }
+      if (channel.ioPortIdRight) {
+        portUsageMap[channel.ioPortIdRight] = {
+          channelType: "input",
+          channelId: channel._id,
+          channelName: channel.source || `Ch ${channel.channelNumber}`,
+          channelNumber: channel.channelNumber,
+        };
+      }
+    }
+
+    for (const channel of outputChannels) {
+      if (channel.ioPortId) {
+        portUsageMap[channel.ioPortId] = {
+          channelType: "output",
+          channelId: channel._id,
+          channelName: channel.busName || channel.destination || `Output ${channel.order}`,
+          channelNumber: channel.order,
+        };
+      }
+    }
+
+    // Fetch ALL ports for all devices in ONE query batch
+    const allPorts = await Promise.all(
+      ioDevices.map((device) =>
+        ctx.db
+          .query("ioPorts")
+          .withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", device._id))
+          .collect()
+      )
+    );
+
+    // Build port info lookup map (portId -> {label, deviceColor, deviceName})
+    // This is a lightweight map for displaying current port assignments
+    const portInfoMap: Record<string, { label: string; deviceColor: string; deviceName: string }> = {};
+
+    // Build grouped port data for input and output dropdowns
+    const inputPortGroups: Array<{
+      device: { _id: string; name: string; shortName: string; color: string };
+      ports: Array<{ _id: string; label: string; portNumber: number; isUsed: boolean; subType?: string }>;
+    }> = [];
+
+    const outputPortGroups: Array<{
+      device: { _id: string; name: string; shortName: string; color: string };
+      ports: Array<{ _id: string; label: string; portNumber: number; isUsed: boolean; subType?: string }>;
+    }> = [];
+
+    ioDevices.forEach((device, index) => {
+      const ports = allPorts[index];
+
+      // Sort ports: regular first, then headphones, then AES (by portNumber within each group)
+      const sortPorts = (portsToSort: typeof ports) => {
+        return [...portsToSort].sort((a, b) => {
+          const aIsHeadphone = a.subType === "headphone_left" || a.subType === "headphone_right";
+          const bIsHeadphone = b.subType === "headphone_left" || b.subType === "headphone_right";
+          const aIsAes = a.subType === "aes_left" || a.subType === "aes_right";
+          const bIsAes = b.subType === "aes_left" || b.subType === "aes_right";
+          const aIsRegular = !aIsHeadphone && !aIsAes;
+          const bIsRegular = !bIsHeadphone && !bIsAes;
+
+          if (aIsRegular && !bIsRegular) return -1;
+          if (!aIsRegular && bIsRegular) return 1;
+          if (aIsHeadphone && bIsAes) return -1;
+          if (aIsAes && bIsHeadphone) return 1;
+
+          return a.portNumber - b.portNumber;
+        });
+      };
+
+      const inputPorts = ports.filter((p) => p.type === "input");
+      const outputPorts = ports.filter((p) => p.type === "output");
+
+      // Add to portInfoMap
+      for (const port of ports) {
+        portInfoMap[port._id] = {
+          label: port.label,
+          deviceColor: device.color,
+          deviceName: device.shortName,
+        };
+      }
+
+      const deviceInfo = {
+        _id: device._id,
+        name: device.name,
+        shortName: device.shortName,
+        color: device.color,
+      };
+
+      if (inputPorts.length > 0) {
+        inputPortGroups.push({
+          device: deviceInfo,
+          ports: sortPorts(inputPorts).map((port) => ({
+            _id: port._id,
+            label: port.label,
+            portNumber: port.portNumber,
+            isUsed: usedPorts.has(port._id),
+            subType: port.subType,
+          })),
+        });
+      }
+
+      if (outputPorts.length > 0) {
+        outputPortGroups.push({
+          device: deviceInfo,
+          ports: sortPorts(outputPorts).map((port) => ({
+            _id: port._id,
+            label: port.label,
+            portNumber: port.portNumber,
+            isUsed: usedPorts.has(port._id),
+            subType: port.subType,
+          })),
+        });
+      }
+    });
+
+    return {
+      portInfoMap,
+      portUsageMap,
+      inputPortGroups,
+      outputPortGroups,
+    };
+  },
+});
+
 // Get port usage map for a project - shows which channel each port is assigned to
 export const getPortUsageMap = query({
   args: { projectId: v.id("projects") },
