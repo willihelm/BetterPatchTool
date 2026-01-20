@@ -25,6 +25,7 @@ import type { OutputChannel } from "@/types/convex";
 import { PortSelectCell } from "./port-select-cell";
 import { useChannelSelection } from "./use-channel-selection";
 import { AutoPatchDialog } from "./auto-patch-dialog";
+import { incrementTrailingNumber } from "@/lib/string-utils";
 
 interface OutputChannelTableProps {
   projectId: Id<"projects">;
@@ -42,17 +43,6 @@ const EDITABLE_COLUMNS = [
 
 // All navigable columns including special cells like port
 const ALL_COLUMNS = ["port", ...EDITABLE_COLUMNS];
-
-// Increment trailing number in string, e.g. "Vocal 1" -> "Vocal 2"
-function incrementTrailingNumber(value: string): string {
-  const match = value.match(/^(.*?)(\d+)$/);
-  if (match) {
-    const [, prefix, numStr] = match;
-    const num = parseInt(numStr, 10) + 1;
-    return prefix + num;
-  }
-  return value;
-}
 
 export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
   const channels = useQuery(api.outputChannels.list, { projectId });
