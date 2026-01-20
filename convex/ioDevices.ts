@@ -5,10 +5,11 @@ import { mutation, query } from "./_generated/server";
 export const list = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const devices = await ctx.db
       .query("ioDevices")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
+    return devices.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   },
 });
 
@@ -21,9 +22,12 @@ export const listWithPorts = query({
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
 
+    // Sort by order
+    const sortedDevices = ioDevices.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
     // Fetch all ports in parallel instead of sequentially
     const allPortsArrays = await Promise.all(
-      ioDevices.map((device) =>
+      sortedDevices.map((device) =>
         ctx.db
           .query("ioPorts")
           .withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", device._id))
@@ -32,7 +36,7 @@ export const listWithPorts = query({
     );
 
     // Map devices to their ports
-    return ioDevices.map((device, index) => {
+    return sortedDevices.map((device, index) => {
       const ports = allPortsArrays[index];
       return {
         ...device,
@@ -93,10 +97,13 @@ export const getWithPorts = query({
 export const listAllPorts = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
-    const ioDevices = await ctx.db
+    const ioDevicesUnsorted = await ctx.db
       .query("ioDevices")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
+
+    // Sort by order field
+    const ioDevices = ioDevicesUnsorted.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
     // Fetch all ports in parallel
     const allPortsArrays = await Promise.all(
@@ -140,6 +147,16 @@ export const create = mutation({
     const aesInputCount = args.aesInputCount ?? 0;
     const aesOutputCount = args.aesOutputCount ?? 0;
 
+    // Calculate next order value
+    const existingDevices = await ctx.db
+      .query("ioDevices")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+    const maxOrder = existingDevices.reduce(
+      (max, d) => Math.max(max, d.order ?? 0),
+      0
+    );
+
     const ioDeviceId = await ctx.db.insert("ioDevices", {
       projectId: args.projectId,
       name: args.name,
@@ -153,6 +170,7 @@ export const create = mutation({
       position: args.position,
       deviceType: args.deviceType ?? "stagebox",
       portsPerRow: args.portsPerRow ?? 12,
+      order: maxOrder + 1,
     });
 
     // Create input ports
@@ -642,5 +660,53 @@ export const updatePortCounts = mutation({
       aesInputCount: newAesInputCount,
       aesOutputCount: newAesOutputCount,
     });
+  },
+});
+
+// Move IO device up or down in the order
+export const moveDevice = mutation({
+  args: {
+    ioDeviceId: v.id("ioDevices"),
+    direction: v.union(v.literal("up"), v.literal("down")),
+  },
+  handler: async (ctx, args) => {
+    const device = await ctx.db.get(args.ioDeviceId);
+    if (!device) return;
+
+    const allDevices = await ctx.db
+      .query("ioDevices")
+      .withIndex("by_project", (q) => q.eq("projectId", device.projectId))
+      .collect();
+
+    // Sort by order (treating undefined/null as 0)
+    const sorted = allDevices.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const currentIndex = sorted.findIndex((d) => d._id === args.ioDeviceId);
+
+    if (currentIndex === -1) return;
+
+    const targetIndex =
+      args.direction === "up" ? currentIndex - 1 : currentIndex + 1;
+
+    if (targetIndex < 0 || targetIndex >= sorted.length) return;
+
+    // Swap order values
+    const current = sorted[currentIndex];
+    const target = sorted[targetIndex];
+
+    await ctx.db.patch(current._id, { order: target.order ?? targetIndex });
+    await ctx.db.patch(target._id, { order: current.order ?? currentIndex });
+  },
+});
+
+// Reorder IO devices by setting order based on array position (for drag-and-drop)
+export const reorderDevices = mutation({
+  args: {
+    deviceIds: v.array(v.id("ioDevices")),
+  },
+  handler: async (ctx, args) => {
+    // Update each device with its new order based on array position
+    for (let i = 0; i < args.deviceIds.length; i++) {
+      await ctx.db.patch(args.deviceIds[i], { order: i + 1 });
+    }
   },
 });

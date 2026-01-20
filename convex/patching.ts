@@ -8,7 +8,7 @@ export const getAllPatchingData = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
     // Fetch all data in parallel to minimize latency
-    const [ioDevices, inputChannels, outputChannels] = await Promise.all([
+    const [ioDevicesUnsorted, inputChannels, outputChannels] = await Promise.all([
       ctx.db
         .query("ioDevices")
         .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -22,6 +22,9 @@ export const getAllPatchingData = query({
         .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
         .collect(),
     ]);
+
+    // Sort ioDevices by order field
+    const ioDevices = ioDevicesUnsorted.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
     // Build used ports set for marking usage
     const usedPorts = new Set<string>();
@@ -244,7 +247,7 @@ export const getAvailablePorts = query({
   },
   handler: async (ctx, args) => {
     // Fetch all data in parallel to avoid sequential queries
-    const [ioDevices, inputChannels, outputChannels] = await Promise.all([
+    const [ioDevicesUnsorted, inputChannels, outputChannels] = await Promise.all([
       ctx.db
         .query("ioDevices")
         .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -258,6 +261,9 @@ export const getAvailablePorts = query({
         .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
         .collect(),
     ]);
+
+    // Sort ioDevices by order field
+    const ioDevices = ioDevicesUnsorted.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
     // Build used ports set
     const usedPorts = new Set<string>();

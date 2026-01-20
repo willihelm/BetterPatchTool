@@ -46,6 +46,7 @@ export default defineSchema({
     position: v.optional(v.object({ x: v.number(), y: v.number() })),
     deviceType: v.optional(v.union(v.literal("stagebox"), v.literal("generic"))), // default: stagebox
     portsPerRow: v.optional(v.number()), // default 12 for stagebox grid view
+    order: v.optional(v.number()), // Display order
   }).index("by_project", ["projectId"]),
 
   // IO Ports

@@ -9,10 +9,6 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.ts", "tests/**/*.test.tsx", "convex/**/*.test.ts"],
-    environmentMatchGlobs: [
-      // Convex tests need node environment
-      ["convex/**/*.test.ts", "node"],
-    ],
   },
   resolve: {
     alias: {

@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -30,10 +29,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Box, ArrowRight, ArrowLeft, Eye, Grid3X3, List, Headphones } from "lucide-react";
+import { Plus, Trash2, Box, ArrowRight, ArrowLeft, Eye, Grid3X3, List, Headphones, GripVertical } from "lucide-react";
 import Link from "next/link";
 import type { IODevice } from "@/types/convex";
 import { IODeviceEditDialog } from "./io-device-edit-dialog";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface IOOverviewProps {
   projectId: Id<"projects">;
@@ -50,10 +66,108 @@ const PRESET_COLORS = [
   "#ec4899", // pink
 ];
 
+interface SortableIODeviceCardProps {
+  ioDevice: IODevice;
+  projectId: Id<"projects">;
+  onRemove: () => void;
+}
+
+function SortableIODeviceCard({ ioDevice, projectId, onRemove }: SortableIODeviceCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: ioDevice._id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <Card ref={setNodeRef} style={style} className={isDragging ? "z-50" : ""}>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing touch-none p-1 -ml-1 hover:bg-muted rounded"
+              title="Drag to reorder"
+            >
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
+            </button>
+            <div
+              className="w-4 h-4 rounded-full"
+              style={{ backgroundColor: ioDevice.color }}
+            />
+            <CardTitle className="text-base">{ioDevice.name}</CardTitle>
+          </div>
+          <Badge variant="outline">{ioDevice.shortName}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground mb-4">
+          <div className="flex items-center gap-1">
+            <ArrowRight className="h-4 w-4" />
+            <span>{ioDevice.inputCount} In</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <ArrowLeft className="h-4 w-4" />
+            <span>{ioDevice.outputCount} Out</span>
+          </div>
+          {(ioDevice.headphoneOutputCount ?? 0) > 0 && (
+            <div className="flex items-center gap-1">
+              <Headphones className="h-4 w-4" />
+              <span>{ioDevice.headphoneOutputCount} HP</span>
+            </div>
+          )}
+          {((ioDevice.aesInputCount ?? 0) > 0 || (ioDevice.aesOutputCount ?? 0) > 0) && (
+            <div className="flex items-center gap-1">
+              <span className="font-mono text-xs">AES</span>
+              <span>
+                {(ioDevice.aesInputCount ?? 0) > 0 && `${ioDevice.aesInputCount}In`}
+                {(ioDevice.aesInputCount ?? 0) > 0 && (ioDevice.aesOutputCount ?? 0) > 0 && "/"}
+                {(ioDevice.aesOutputCount ?? 0) > 0 && `${ioDevice.aesOutputCount}Out`}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            asChild
+            title="View Ports"
+          >
+            <Link href={`/project/${projectId}/io/${ioDevice._id}`}>
+              <Eye className="h-4 w-4" />
+            </Link>
+          </Button>
+          <IODeviceEditDialog ioDevice={ioDevice} />
+          <Button
+            variant="destructive"
+            size="icon"
+            onClick={onRemove}
+            title="Remove"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function IOOverview({ projectId }: IOOverviewProps) {
   const ioDevices = useQuery(api.ioDevices.list, { projectId });
   const createIODevice = useMutation(api.ioDevices.create);
   const removeIODevice = useMutation(api.ioDevices.remove);
+  const reorderDevices = useMutation(api.ioDevices.reorderDevices);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newIODevice, setNewIODevice] = useState({
@@ -68,6 +182,33 @@ export function IOOverview({ projectId }: IOOverviewProps) {
     deviceType: "stagebox" as "stagebox" | "generic",
     portsPerRow: 12,
   });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id && ioDevices) {
+      const oldIndex = ioDevices.findIndex((d) => d._id === active.id);
+      const newIndex = ioDevices.findIndex((d) => d._id === over.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const reordered = arrayMove(ioDevices, oldIndex, newIndex);
+        reorderDevices({
+          deviceIds: reordered.map((d) => d._id) as Id<"ioDevices">[],
+        });
+      }
+    }
+  };
 
   const handleCreate = async () => {
     if (!newIODevice.name || !newIODevice.shortName) return;
@@ -356,73 +497,27 @@ export function IOOverview({ projectId }: IOOverviewProps) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {ioDevices.map((ioDevice) => (
-            <Card key={ioDevice._id}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-4 h-4 rounded-full"
-                      style={{ backgroundColor: ioDevice.color }}
-                    />
-                    <CardTitle className="text-base">{ioDevice.name}</CardTitle>
-                  </div>
-                  <Badge variant="outline">{ioDevice.shortName}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground mb-4">
-                  <div className="flex items-center gap-1">
-                    <ArrowRight className="h-4 w-4" />
-                    <span>{ioDevice.inputCount} In</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <ArrowLeft className="h-4 w-4" />
-                    <span>{ioDevice.outputCount} Out</span>
-                  </div>
-                  {(ioDevice.headphoneOutputCount ?? 0) > 0 && (
-                    <div className="flex items-center gap-1">
-                      <Headphones className="h-4 w-4" />
-                      <span>{ioDevice.headphoneOutputCount} HP</span>
-                    </div>
-                  )}
-                  {((ioDevice.aesInputCount ?? 0) > 0 || (ioDevice.aesOutputCount ?? 0) > 0) && (
-                    <div className="flex items-center gap-1">
-                      <span className="font-mono text-xs">AES</span>
-                      <span>
-                        {(ioDevice.aesInputCount ?? 0) > 0 && `${ioDevice.aesInputCount}In`}
-                        {(ioDevice.aesInputCount ?? 0) > 0 && (ioDevice.aesOutputCount ?? 0) > 0 && "/"}
-                        {(ioDevice.aesOutputCount ?? 0) > 0 && `${ioDevice.aesOutputCount}Out`}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    asChild
-                    title="View Ports"
-                  >
-                    <Link href={`/project/${projectId}/io/${ioDevice._id}`}>
-                      <Eye className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                  <IODeviceEditDialog ioDevice={ioDevice as IODevice} />
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    onClick={() => removeIODevice({ ioDeviceId: ioDevice._id })}
-                    title="Remove"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={ioDevices.map((d) => d._id)}
+            strategy={rectSortingStrategy}
+          >
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {ioDevices.map((ioDevice) => (
+                <SortableIODeviceCard
+                  key={ioDevice._id}
+                  ioDevice={ioDevice as IODevice}
+                  projectId={projectId}
+                  onRemove={() => removeIODevice({ ioDeviceId: ioDevice._id })}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   );
