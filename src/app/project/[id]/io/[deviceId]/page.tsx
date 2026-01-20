@@ -13,11 +13,17 @@ import { IODevicePortList } from "@/components/project/io-device-port-list";
 
 export default function IODeviceDetailPage() {
   const params = useParams();
-  const projectId = params.id as Id<"projects">;
-  const deviceId = params.deviceId as Id<"ioDevices">;
+  const projectId = params.id as Id<"projects"> | undefined;
+  const deviceId = params.deviceId as Id<"ioDevices"> | undefined;
 
-  const device = useQuery(api.ioDevices.getWithPorts, { ioDeviceId: deviceId });
-  const portUsageMap = useQuery(api.patching.getPortUsageMap, { projectId });
+  const device = useQuery(
+    api.ioDevices.getWithPorts,
+    deviceId ? { ioDeviceId: deviceId } : "skip"
+  );
+  const portUsageMap = useQuery(
+    api.patching.getPortUsageMap,
+    projectId ? { projectId } : "skip"
+  );
 
   if (device === undefined || portUsageMap === undefined) {
     return (
