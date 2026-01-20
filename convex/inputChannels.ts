@@ -31,6 +31,8 @@ export const create = mutation({
     mixerId: v.optional(v.id("mixers")),
     ioPortId: v.optional(v.id("ioPorts")),
     ioPortIdRight: v.optional(v.id("ioPorts")),
+    isStereo: v.optional(v.boolean()),
+    sourceRight: v.optional(v.string()),
     uhf: v.optional(v.string()),
     micInputDev: v.optional(v.string()),
     patched: v.optional(v.boolean()),
@@ -63,6 +65,8 @@ export const create = mutation({
       mixerId: args.mixerId,
       ioPortId: args.ioPortId,
       ioPortIdRight: args.ioPortIdRight,
+      isStereo: args.isStereo,
+      sourceRight: args.sourceRight,
       uhf: args.uhf,
       micInputDev: args.micInputDev,
       patched: args.patched ?? false,
@@ -84,6 +88,8 @@ export const update = mutation({
     mixerId: v.optional(v.id("mixers")),
     ioPortId: v.optional(v.id("ioPorts")),
     ioPortIdRight: v.optional(v.id("ioPorts")),
+    isStereo: v.optional(v.boolean()),
+    sourceRight: v.optional(v.string()),
     uhf: v.optional(v.string()),
     micInputDev: v.optional(v.string()),
     patched: v.optional(v.boolean()),
@@ -231,6 +237,28 @@ export const generateChannelsUpTo = mutation({
     }
 
     return { added: channelsToAdd, total: args.targetCount };
+  },
+});
+
+// Kanal zwischen Mono und Stereo umschalten
+export const toggleStereo = mutation({
+  args: { channelId: v.id("inputChannels") },
+  handler: async (ctx, args) => {
+    const channel = await ctx.db.get(args.channelId);
+    if (!channel) throw new Error("Channel not found");
+
+    const newIsStereo = !channel.isStereo;
+
+    // When switching to mono, clear the right fields
+    if (newIsStereo) {
+      await ctx.db.patch(args.channelId, { isStereo: true });
+    } else {
+      await ctx.db.patch(args.channelId, {
+        isStereo: false,
+        ioPortIdRight: undefined,
+        sourceRight: undefined,
+      });
+    }
   },
 });
 

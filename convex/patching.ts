@@ -381,6 +381,7 @@ export const patchOutputChannel = mutation({
   args: {
     channelId: v.id("outputChannels"),
     ioPortId: v.union(v.id("ioPorts"), v.null()),
+    ioPortIdRight: v.optional(v.union(v.id("ioPorts"), v.null())),
   },
   handler: async (ctx, args) => {
     const channel = await ctx.db.get(args.channelId);
@@ -393,11 +394,29 @@ export const patchOutputChannel = mutation({
       if (port.type !== "output") throw new Error("Cannot assign input port to output channel");
     }
 
-    if (args.ioPortId === null) {
-      await ctx.db.patch(args.channelId, { ioPortId: undefined });
-    } else {
-      await ctx.db.patch(args.channelId, { ioPortId: args.ioPortId });
+    if (args.ioPortIdRight) {
+      const portRight = await ctx.db.get(args.ioPortIdRight);
+      if (!portRight) throw new Error("Right port not found");
+      if (portRight.type !== "output") throw new Error("Cannot assign input port to output channel");
     }
+
+    const updates: { ioPortId?: Id<"ioPorts"> | undefined; ioPortIdRight?: Id<"ioPorts"> | undefined } = {};
+
+    // Handle left/mono port
+    if (args.ioPortId === null) {
+      updates.ioPortId = undefined;
+    } else if (args.ioPortId) {
+      updates.ioPortId = args.ioPortId;
+    }
+
+    // Handle right port (for stereo)
+    if (args.ioPortIdRight === null) {
+      updates.ioPortIdRight = undefined;
+    } else if (args.ioPortIdRight !== undefined) {
+      updates.ioPortIdRight = args.ioPortIdRight;
+    }
+
+    await ctx.db.patch(args.channelId, updates);
   },
 });
 
@@ -456,29 +475,78 @@ export const autoPatchInputChannels = mutation({
     let skipped = 0;
 
     for (const channel of channels) {
-      // Find next available port
-      while (portIndex < sortedPorts.length) {
-        const port = sortedPorts[portIndex];
-        if (!args.skipAssigned || !usedPorts.has(port._id)) {
-          break;
+      if (channel.isStereo) {
+        // For stereo channels, find two consecutive available ports
+        let leftPort: (typeof sortedPorts)[0] | undefined;
+        let rightPort: (typeof sortedPorts)[0] | undefined;
+        let tempPortIndex = portIndex;
+
+        // Find first available port for left channel
+        while (tempPortIndex < sortedPorts.length) {
+          const port = sortedPorts[tempPortIndex];
+          if (!args.skipAssigned || !usedPorts.has(port._id)) {
+            leftPort = port;
+            break;
+          }
+          tempPortIndex++;
         }
+
+        if (!leftPort) {
+          skipped++;
+          continue; // No ports available for this stereo pair
+        }
+
+        // Find second available port for right channel
+        tempPortIndex++;
+        while (tempPortIndex < sortedPorts.length) {
+          const port = sortedPorts[tempPortIndex];
+          if (!args.skipAssigned || !usedPorts.has(port._id)) {
+            rightPort = port;
+            break;
+          }
+          tempPortIndex++;
+        }
+
+        if (!rightPort) {
+          skipped++;
+          continue; // No second port available for stereo pair
+        }
+
+        await ctx.db.patch(channel._id, {
+          ioPortId: leftPort._id,
+          ioPortIdRight: rightPort._id,
+          patched: true,
+        });
+
+        usedPorts.add(leftPort._id);
+        usedPorts.add(rightPort._id);
+        portIndex = tempPortIndex + 1;
+        assigned++;
+      } else {
+        // For mono channels, find next available port
+        while (portIndex < sortedPorts.length) {
+          const port = sortedPorts[portIndex];
+          if (!args.skipAssigned || !usedPorts.has(port._id)) {
+            break;
+          }
+          portIndex++;
+          skipped++;
+        }
+
+        if (portIndex >= sortedPorts.length) {
+          break; // No more ports available
+        }
+
+        const port = sortedPorts[portIndex];
+        await ctx.db.patch(channel._id, {
+          ioPortId: port._id,
+          patched: true,
+        });
+
+        usedPorts.add(port._id);
         portIndex++;
-        skipped++;
+        assigned++;
       }
-
-      if (portIndex >= sortedPorts.length) {
-        break; // No more ports available
-      }
-
-      const port = sortedPorts[portIndex];
-      await ctx.db.patch(channel._id, {
-        ioPortId: port._id,
-        patched: true,
-      });
-
-      usedPorts.add(port._id);
-      portIndex++;
-      assigned++;
     }
 
     return {
@@ -534,6 +602,7 @@ export const autoPatchOutputChannels = mutation({
 
       for (const ch of allOutputChannels) {
         if (ch.ioPortId) usedPorts.add(ch.ioPortId);
+        if (ch.ioPortIdRight) usedPorts.add(ch.ioPortIdRight);
       }
     }
 
@@ -543,26 +612,74 @@ export const autoPatchOutputChannels = mutation({
     let skipped = 0;
 
     for (const channel of channels) {
-      // Find next available port
-      while (portIndex < sortedPorts.length) {
-        const port = sortedPorts[portIndex];
-        if (!args.skipAssigned || !usedPorts.has(port._id)) {
-          break;
+      if (channel.isStereo) {
+        // For stereo channels, find two consecutive available ports
+        let leftPort: (typeof sortedPorts)[0] | undefined;
+        let rightPort: (typeof sortedPorts)[0] | undefined;
+        let tempPortIndex = portIndex;
+
+        // Find first available port for left channel
+        while (tempPortIndex < sortedPorts.length) {
+          const port = sortedPorts[tempPortIndex];
+          if (!args.skipAssigned || !usedPorts.has(port._id)) {
+            leftPort = port;
+            break;
+          }
+          tempPortIndex++;
         }
+
+        if (!leftPort) {
+          skipped++;
+          continue; // No ports available for this stereo pair
+        }
+
+        // Find second available port for right channel
+        tempPortIndex++;
+        while (tempPortIndex < sortedPorts.length) {
+          const port = sortedPorts[tempPortIndex];
+          if (!args.skipAssigned || !usedPorts.has(port._id)) {
+            rightPort = port;
+            break;
+          }
+          tempPortIndex++;
+        }
+
+        if (!rightPort) {
+          skipped++;
+          continue; // No second port available for stereo pair
+        }
+
+        await ctx.db.patch(channel._id, {
+          ioPortId: leftPort._id,
+          ioPortIdRight: rightPort._id,
+        });
+
+        usedPorts.add(leftPort._id);
+        usedPorts.add(rightPort._id);
+        portIndex = tempPortIndex + 1;
+        assigned++;
+      } else {
+        // For mono channels, find next available port
+        while (portIndex < sortedPorts.length) {
+          const port = sortedPorts[portIndex];
+          if (!args.skipAssigned || !usedPorts.has(port._id)) {
+            break;
+          }
+          portIndex++;
+          skipped++;
+        }
+
+        if (portIndex >= sortedPorts.length) {
+          break; // No more ports available
+        }
+
+        const port = sortedPorts[portIndex];
+        await ctx.db.patch(channel._id, { ioPortId: port._id });
+
+        usedPorts.add(port._id);
         portIndex++;
-        skipped++;
+        assigned++;
       }
-
-      if (portIndex >= sortedPorts.length) {
-        break; // No more ports available
-      }
-
-      const port = sortedPorts[portIndex];
-      await ctx.db.patch(channel._id, { ioPortId: port._id });
-
-      usedPorts.add(port._id);
-      portIndex++;
-      assigned++;
     }
 
     return {
@@ -647,7 +764,10 @@ export const clearPatches = mutation({
 
     if (args.outputChannelIds) {
       for (const channelId of args.outputChannelIds) {
-        await ctx.db.patch(channelId, { ioPortId: undefined });
+        await ctx.db.patch(channelId, {
+          ioPortId: undefined,
+          ioPortIdRight: undefined,
+        });
         cleared++;
       }
     }

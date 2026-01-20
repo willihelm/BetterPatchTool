@@ -85,7 +85,9 @@ export default defineSchema({
     ioPortId: v.optional(v.id("ioPorts")),
     // For True Stereo: second port
     ioPortIdRight: v.optional(v.id("ioPorts")),
+    isStereo: v.optional(v.boolean()),
     source: v.string(),
+    sourceRight: v.optional(v.string()),
     uhf: v.optional(v.string()),
     micInputDev: v.optional(v.string()),
     patched: v.boolean(),
@@ -107,7 +109,11 @@ export default defineSchema({
     mixerId: v.optional(v.id("mixers")),
     busName: v.string(),
     ioPortId: v.optional(v.id("ioPorts")),
+    // For True Stereo: second port
+    ioPortIdRight: v.optional(v.id("ioPorts")),
+    isStereo: v.optional(v.boolean()),
     destination: v.string(),
+    destinationRight: v.optional(v.string()),
     ampProcessor: v.optional(v.string()),
     location: v.optional(v.string()),
     cable: v.optional(v.string()),

@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Check, Filter, ChevronDown } from "lucide-react";
 import { usePortData } from "./port-data-context";
+import { Input } from "@/components/ui/input";
 
 interface PatchMatrixProps {
   projectId: Id<"projects">;
@@ -35,11 +36,16 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
     mode: "patch" | "unpatch";
   } | null>(null);
   const [isShiftHeld, setIsShiftHeld] = useState(false);
+  const [editingChannel, setEditingChannel] = useState<{ id: string; name: string } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Queries
   const inputChannels = useQuery(api.inputChannels.list, { projectId });
   const outputChannels = useQuery(api.outputChannels.list, { projectId });
+  const mixers = useQuery(api.mixers.list, { projectId });
+
+  // Check if stereo mode is available (first mixer has true_stereo)
+  const isStereoAvailable = mixers?.[0]?.stereoMode === "true_stereo";
 
   // Get port groups from context instead of separate query
   const { inputPortGroups, outputPortGroups, isLoading: portDataLoading } = usePortData();
@@ -49,8 +55,51 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   const patchInputChannel = useMutation(api.patching.patchInputChannel);
   const patchOutputChannel = useMutation(api.patching.patchOutputChannel);
   const batchPatchChannels = useMutation(api.patching.batchPatchChannels);
+  const toggleInputStereo = useMutation(api.inputChannels.toggleStereo);
+  const toggleOutputStereo = useMutation(api.outputChannels.toggleStereo);
+  const updateInputChannel = useMutation(api.inputChannels.update);
+  const updateOutputChannel = useMutation(api.outputChannels.update);
 
-  const channels = channelType === "input" ? inputChannels : outputChannels;
+  const rawChannels = channelType === "input" ? inputChannels : outputChannels;
+
+  // Expand stereo channels into L/R rows
+  const channels = useMemo(() => {
+    if (!rawChannels) return null;
+    const expanded: Array<{
+      _id: string;
+      originalChannel: typeof rawChannels[number];
+      stereoSide: "left" | "right" | null;
+      ioPortId: string | undefined;
+    }> = [];
+
+    for (const channel of rawChannels) {
+      if (channel.isStereo) {
+        // Add left row
+        expanded.push({
+          _id: `${channel._id}-L`,
+          originalChannel: channel,
+          stereoSide: "left",
+          ioPortId: channel.ioPortId,
+        });
+        // Add right row
+        expanded.push({
+          _id: `${channel._id}-R`,
+          originalChannel: channel,
+          stereoSide: "right",
+          ioPortId: channel.ioPortIdRight,
+        });
+      } else {
+        // Mono channel - single row
+        expanded.push({
+          _id: channel._id,
+          originalChannel: channel,
+          stereoSide: null,
+          ioPortId: channel.ioPortId,
+        });
+      }
+    }
+    return expanded;
+  }, [rawChannels]);
 
   // Filter port groups by selected devices
   const filteredPortGroups = portGroups?.filter((group) =>
@@ -72,9 +121,12 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
 
   // Create a map of portId -> channelId for quick lookup
   const portToChannelMap = new Map<string, string>();
-  channels?.forEach((channel) => {
+  rawChannels?.forEach((channel) => {
     if (channel.ioPortId) {
       portToChannelMap.set(channel.ioPortId, channel._id);
+    }
+    if (channel.ioPortIdRight) {
+      portToChannelMap.set(channel.ioPortIdRight, channel._id);
     }
   });
 
@@ -146,11 +198,12 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
       portId: string,
       channelId: string,
       currentPortId: string | undefined,
-      isShiftClick: boolean
+      isShiftClick: boolean,
+      stereoSide: "left" | "right" | null
     ) => {
       const isAssigned = currentPortId === portId;
 
-      // Handle Shift+Click for diagonal patching
+      // Handle Shift+Click for diagonal patching (only for mono channels or simplified stereo)
       if (isShiftClick && channels && visiblePorts.length > 0) {
         if (!diagonalAnchor) {
           // Set anchor - mode depends on whether the anchor cell is patched
@@ -165,12 +218,12 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
         // Check if valid diagonal from anchor
         const end = { row: rowIndex, col: colIndex };
         if (isValidDiagonal(diagonalAnchor, end)) {
-          // Execute batch patch
+          // Execute batch patch - note: batch patching doesn't support stereo side yet
           const cells = getDiagonalCells(diagonalAnchor, end);
           const patches = cells
             .filter((cell) => cell.row < channels.length && cell.col < visiblePorts.length)
             .map((cell) => ({
-              channelId: channels[cell.row]._id,
+              channelId: channels[cell.row].originalChannel._id,
               ioPortId: diagonalAnchor.mode === "patch" ? visiblePorts[cell.col]._id : null,
             }));
 
@@ -186,20 +239,46 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
         return;
       }
 
-      // Normal click behavior
+      // Normal click behavior - handle stereo side
       if (channelType === "input") {
-        await patchInputChannel({
-          channelId: channelId as Id<"inputChannels">,
-          ioPortId: isAssigned ? null : (portId as Id<"ioPorts">),
-        });
+        if (stereoSide === "right") {
+          // Get the current channel to preserve the left port
+          const channel = rawChannels?.find(c => c._id === channelId);
+          await patchInputChannel({
+            channelId: channelId as Id<"inputChannels">,
+            ioPortId: (channel?.ioPortId as Id<"ioPorts">) ?? null,
+            ioPortIdRight: isAssigned ? null : (portId as Id<"ioPorts">),
+          });
+        } else {
+          // Left or mono
+          const channel = rawChannels?.find(c => c._id === channelId);
+          await patchInputChannel({
+            channelId: channelId as Id<"inputChannels">,
+            ioPortId: isAssigned ? null : (portId as Id<"ioPorts">),
+            ioPortIdRight: stereoSide === "left" ? (channel?.ioPortIdRight as Id<"ioPorts">) ?? null : undefined,
+          });
+        }
       } else {
-        await patchOutputChannel({
-          channelId: channelId as Id<"outputChannels">,
-          ioPortId: isAssigned ? null : (portId as Id<"ioPorts">),
-        });
+        if (stereoSide === "right") {
+          // Get the current channel to preserve the left port
+          const channel = rawChannels?.find(c => c._id === channelId);
+          await patchOutputChannel({
+            channelId: channelId as Id<"outputChannels">,
+            ioPortId: (channel?.ioPortId as Id<"ioPorts">) ?? null,
+            ioPortIdRight: isAssigned ? null : (portId as Id<"ioPorts">),
+          });
+        } else {
+          // Left or mono
+          const channel = rawChannels?.find(c => c._id === channelId);
+          await patchOutputChannel({
+            channelId: channelId as Id<"outputChannels">,
+            ioPortId: isAssigned ? null : (portId as Id<"ioPorts">),
+            ioPortIdRight: stereoSide === "left" ? (channel?.ioPortIdRight as Id<"ioPorts">) ?? null : undefined,
+          });
+        }
       }
     },
-    [channelType, patchInputChannel, patchOutputChannel, batchPatchChannels, channels, visiblePorts, diagonalAnchor, isValidDiagonal, getDiagonalCells]
+    [channelType, patchInputChannel, patchOutputChannel, batchPatchChannels, channels, rawChannels, visiblePorts, diagonalAnchor, isValidDiagonal, getDiagonalCells]
   );
 
   const handleKeyDown = useCallback(
@@ -231,7 +310,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           const channel = channels[row];
           const port = visiblePorts[col];
           if (channel && port) {
-            handleCellClick(row, col, port._id, channel._id, channel.ioPortId, e.shiftKey);
+            handleCellClick(row, col, port._id, channel.originalChannel._id, channel.ioPortId, e.shiftKey, channel.stereoSide);
           }
           break;
         case "Escape":
@@ -242,6 +321,31 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
       }
     },
     [activeCell, channels, visiblePorts, handleCellClick]
+  );
+
+  // Handle toggling stereo mode for a channel
+  const handleToggleStereo = useCallback(
+    async (channelId: string) => {
+      if (channelType === "input") {
+        await toggleInputStereo({ channelId: channelId as Id<"inputChannels"> });
+      } else {
+        await toggleOutputStereo({ channelId: channelId as Id<"outputChannels"> });
+      }
+    },
+    [channelType, toggleInputStereo, toggleOutputStereo]
+  );
+
+  // Handle saving channel name
+  const handleSaveChannelName = useCallback(
+    async (channelId: string, name: string) => {
+      if (channelType === "input") {
+        await updateInputChannel({ channelId: channelId as Id<"inputChannels">, source: name });
+      } else {
+        await updateOutputChannel({ channelId: channelId as Id<"outputChannels">, busName: name });
+      }
+      setEditingChannel(null);
+    },
+    [channelType, updateInputChannel, updateOutputChannel]
   );
 
   // Initialize active cell when data loads
@@ -509,29 +613,65 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           </thead>
           <tbody>
             {channels.map((channel, rowIndex) => {
+              const orig = channel.originalChannel;
               const channelNumber = channelType === "input"
-                ? (channel as { channelNumber?: number }).channelNumber ?? rowIndex + 1
+                ? (orig as { channelNumber?: number }).channelNumber ?? rowIndex + 1
                 : rowIndex + 1;
               const channelName = channelType === "input"
-                ? (channel as { source?: string }).source
-                : (channel as { busName?: string }).busName;
+                ? (orig as { source?: string }).source
+                : (orig as { busName?: string }).busName;
+
+              const isEditingThisChannel = editingChannel?.id === orig._id;
 
               return (
                 <tr key={channel._id}>
                   {/* Channel label cell */}
                   <td
                     className={cn(
-                      "sticky left-0 z-10 border-r p-2 text-xs bg-background transition-colors",
+                      "sticky left-0 z-10 border-r p-1 text-xs bg-background transition-colors",
                       (activeCell?.row === rowIndex || hoveredCell?.row === rowIndex) && "bg-primary/10"
                     )}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-medium w-6 text-right">
+                    <div className="flex items-center gap-1">
+                      <span className="font-mono font-medium w-6 text-right shrink-0">
                         {channelNumber}
                       </span>
-                      <span className="text-muted-foreground truncate max-w-[140px]">
-                        {channelName || "-"}
-                      </span>
+                      {isEditingThisChannel ? (
+                        <Input
+                          autoFocus
+                          className="h-6 text-xs px-1 flex-1 min-w-0"
+                          defaultValue={editingChannel.name}
+                          onBlur={(e) => handleSaveChannelName(orig._id, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              handleSaveChannelName(orig._id, e.currentTarget.value);
+                            } else if (e.key === "Escape") {
+                              setEditingChannel(null);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span
+                          className="text-muted-foreground truncate flex-1 min-w-0 cursor-text hover:text-foreground"
+                          onClick={() => setEditingChannel({ id: orig._id, name: channelName || "" })}
+                        >
+                          {channelName || "-"}
+                        </span>
+                      )}
+                      {/* Stereo/Mono badge - fixed width for alignment */}
+                      {isStereoAvailable && (
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] px-1 py-0 h-4 w-5 shrink-0 cursor-pointer hover:bg-accent flex items-center justify-center",
+                            channel.stereoSide && "font-semibold"
+                          )}
+                          onClick={() => handleToggleStereo(orig._id)}
+                          title={channel.stereoSide ? "Click to switch to Mono" : "Click to switch to Stereo"}
+                        >
+                          {channel.stereoSide === "left" ? "L" : channel.stereoSide === "right" ? "R" : "M"}
+                        </Badge>
+                      )}
                     </div>
                   </td>
                   {/* Matrix cells */}
@@ -540,8 +680,9 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                     const isActive =
                       activeCell?.row === rowIndex && activeCell?.col === colIndex;
                     const otherChannelId = portToChannelMap.get(port._id);
+                    // For stereo channels, don't mark the opposite side's port as "used by other"
                     const isUsedByOther =
-                      otherChannelId && otherChannelId !== channel._id;
+                      otherChannelId && otherChannelId !== orig._id;
 
                     // Check if this is the first port of a device group for border
                     const isFirstOfDevice =
@@ -581,7 +722,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                         )}
                         onClick={(e) => {
                           setActiveCell({ row: rowIndex, col: colIndex });
-                          handleCellClick(rowIndex, colIndex, port._id, channel._id, channel.ioPortId, e.shiftKey);
+                          handleCellClick(rowIndex, colIndex, port._id, orig._id, channel.ioPortId, e.shiftKey, channel.stereoSide);
                         }}
                         onMouseEnter={() => setHoveredCell({ row: rowIndex, col: colIndex })}
                         onMouseLeave={() => setHoveredCell(null)}
@@ -608,7 +749,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-6 text-xs text-muted-foreground">
+          <div className="flex items-center gap-6 text-xs text-muted-foreground flex-wrap">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 bg-primary/20 border rounded flex items-center justify-center">
                 <Check className="h-3 w-3" />
@@ -624,6 +765,12 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 border rounded" />
               <span>Available</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">M</Badge>
+              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">L</Badge>
+              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">R</Badge>
+              <span>Click to toggle Mono/Stereo</span>
             </div>
           </div>
         </>

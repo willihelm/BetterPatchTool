@@ -63,7 +63,9 @@ export interface InputChannel {
   channelNumber: number;
   ioPortId?: string;
   ioPortIdRight?: string;
+  isStereo?: boolean;
   source: string;
+  sourceRight?: string;
   uhf?: string;
   micInputDev?: string;
   patched: boolean;
@@ -82,7 +84,10 @@ export interface OutputChannel {
   mixerId?: string;
   busName: string;
   ioPortId?: string;
+  ioPortIdRight?: string;
+  isStereo?: boolean;
   destination: string;
+  destinationRight?: string;
   ampProcessor?: string;
   location?: string;
   cable?: string;

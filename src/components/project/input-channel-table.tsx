@@ -18,11 +18,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Plus, MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Zap, X } from "lucide-react";
 import type { InputChannel } from "@/types/convex";
 import { PortSelectCell } from "./port-select-cell";
+import { StereoPortSelectCell } from "./stereo-port-select-cell";
 import { useChannelSelection } from "./use-channel-selection";
 import { AutoPatchDialog } from "./auto-patch-dialog";
 import { incrementTrailingNumber } from "@/lib/string-utils";
@@ -47,15 +49,21 @@ const ALL_COLUMNS = ["port", ...EDITABLE_COLUMNS];
 
 export function InputChannelTable({ projectId }: InputChannelTableProps) {
   const channels = useQuery(api.inputChannels.list, { projectId });
+  const mixers = useQuery(api.mixers.list, { projectId });
 
   const createChannel = useMutation(api.inputChannels.create);
   const updateChannel = useMutation(api.inputChannels.update);
   const removeChannel = useMutation(api.inputChannels.remove);
   const moveChannel = useMutation(api.inputChannels.moveChannel);
   const patchChannel = useMutation(api.patching.patchInputChannel);
+  const toggleStereoChannel = useMutation(api.inputChannels.toggleStereo);
 
   const [portDropdownOpen, setPortDropdownOpen] = useState<number | null>(null);
   const [autoPatchDialogOpen, setAutoPatchDialogOpen] = useState(false);
+
+  // Get stereo mode from first mixer (simplified approach)
+  const firstMixer = mixers?.[0];
+  const isStereoAvailable = firstMixer?.stereoMode === "true_stereo";
 
   // Multi-select for auto-patching
   const channelIds = channels?.map((c) => c._id) ?? [];
@@ -184,6 +192,13 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
       } else if (e.key === "Escape") {
         e.preventDefault();
         setActiveCell(null);
+      } else if (isStereoAvailable && (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "s") {
+        // Ctrl/Cmd+Shift+S: Toggle stereo for current row
+        e.preventDefault();
+        const channel = channels?.[rowIndex];
+        if (channel) {
+          handleToggleStereo(channel._id);
+        }
       }
       return;
     }
@@ -266,6 +281,21 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
       channelId: channelId as Id<"inputChannels">,
       ioPortId: portId as Id<"ioPorts"> | null,
     });
+  };
+
+  const handlePortSelectStereo = async (channelId: string, portId: string | null, side: "left" | "right") => {
+    const channel = channels?.find(c => c._id === channelId);
+    if (!channel) return;
+
+    await patchChannel({
+      channelId: channelId as Id<"inputChannels">,
+      ioPortId: side === "left" ? (portId as Id<"ioPorts"> | null) : (channel.ioPortId as Id<"ioPorts"> | null),
+      ioPortIdRight: side === "right" ? (portId as Id<"ioPorts"> | null) : (channel.ioPortIdRight as Id<"ioPorts"> | null),
+    });
+  };
+
+  const handleToggleStereo = async (channelId: string) => {
+    await toggleStereoChannel({ channelId: channelId as Id<"inputChannels"> });
   };
 
   const isCellActive = (rowIndex: number, columnId: string) => {
@@ -397,15 +427,29 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
                   <TableCell className="text-center font-mono text-sm">
                     {channel.channelNumber}
                   </TableCell>
-                  <PortSelectCell
-                    value={channel.ioPortId}
-                    portType="input"
-                    currentChannelId={channel._id}
-                    isActive={isCellActive(rowIndex, "port")}
-                    onSelect={(portId) => handlePortSelect(channel._id, portId)}
-                    onCellClick={() => setActiveCell({ rowIndex, columnId: "port" })}
-                    onOpenChange={(open) => setPortDropdownOpen(open ? rowIndex : null)}
-                  />
+                  {channel.isStereo ? (
+                    <StereoPortSelectCell
+                      valueLeft={channel.ioPortId}
+                      valueRight={channel.ioPortIdRight}
+                      portType="input"
+                      currentChannelId={channel._id}
+                      isActive={isCellActive(rowIndex, "port")}
+                      onSelectLeft={(portId) => handlePortSelectStereo(channel._id, portId, "left")}
+                      onSelectRight={(portId) => handlePortSelectStereo(channel._id, portId, "right")}
+                      onCellClick={() => setActiveCell({ rowIndex, columnId: "port" })}
+                      onOpenChange={(open) => setPortDropdownOpen(open ? rowIndex : null)}
+                    />
+                  ) : (
+                    <PortSelectCell
+                      value={channel.ioPortId}
+                      portType="input"
+                      currentChannelId={channel._id}
+                      isActive={isCellActive(rowIndex, "port")}
+                      onSelect={(portId) => handlePortSelect(channel._id, portId)}
+                      onCellClick={() => setActiveCell({ rowIndex, columnId: "port" })}
+                      onOpenChange={(open) => setPortDropdownOpen(open ? rowIndex : null)}
+                    />
+                  )}
 
                   {/* Editable Cells */}
                   {EDITABLE_COLUMNS.map((columnId) => (
@@ -457,6 +501,17 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
                           <ChevronDown className="mr-2 h-4 w-4" />
                           Move Down
                         </DropdownMenuItem>
+                        {isStereoAvailable && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleToggleStereo(channel._id)}
+                            >
+                              {channel.isStereo ? "Mono" : "Stereo"}
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={() => removeChannel({ channelId: channel._id })}
                           className="text-destructive"
