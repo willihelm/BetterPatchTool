@@ -571,12 +571,42 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
               }
             }}
           >
-        <table className="w-full border-collapse">
-          <thead className="sticky top-0 z-10 bg-background">
+        <table className="w-full border-separate border-spacing-0">
+          <thead className="sticky top-0 z-20 bg-background">
             <tr>
-              {/* Channel header cell */}
-              <th className="sticky left-0 z-20 bg-muted/50 border-b border-r p-2 text-left text-xs font-medium min-w-[180px]">
-                Channel
+              {/* Channel header cell - corner cell with FROM/TO arrow indicator */}
+              <th className="sticky left-0 top-0 z-30 bg-muted border-b border-r p-2 text-xs font-medium min-w-[180px] h-[72px]">
+                <div className="relative h-full">
+                  {channelType === "input" ? (
+                    <>
+                      {/* Input: FROM ports TO channels */}
+                      <div className="absolute bottom-6 right-0 flex items-end gap-1">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">From</span>
+                      </div>
+                      <div className="absolute bottom-0 right-0 flex items-end gap-1">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">To</span>
+                        <svg viewBox="0 0 32 32" className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M 28 4 C 28 18, 28 24, 12 24" strokeLinecap="round" />
+                          <path d="M 17 19 L 12 24 L 17 29" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                        </svg>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Output: FROM channels TO ports */}
+                      <div className="absolute bottom-6 right-0 flex items-end gap-1">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">To</span>
+                      </div>
+                      <div className="absolute bottom-0 right-0 flex items-end gap-1">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">From</span>
+                        <svg viewBox="0 0 32 32" className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M 12 24 C 28 24, 28 18, 28 4" strokeLinecap="round" />
+                          <path d="M 23 9 L 28 4 L 33 9" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                        </svg>
+                      </div>
+                    </>
+                  )}
+                </div>
               </th>
               {/* Port headers */}
               {visiblePorts.map((port, colIndex) => {
@@ -589,9 +619,9 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                   <th
                     key={port._id}
                     className={cn(
-                      "border-b p-2 text-center text-xs font-medium min-w-[50px] bg-muted/50 transition-colors",
+                      "border-b p-2 text-center text-xs font-medium min-w-[50px] bg-muted transition-colors",
                       isFirstOfDevice && "border-l-2",
-                      (activeCell?.col === colIndex || hoveredCell?.col === colIndex) && "bg-primary/10"
+                      (activeCell?.col === colIndex || hoveredCell?.col === colIndex) && "bg-accent"
                     )}
                   >
                     <div className="flex flex-col items-center gap-1">
@@ -600,11 +630,6 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                         style={{ backgroundColor: port.device.color }}
                       />
                       <span className="font-mono text-[10px]">{port.label}</span>
-                      {isFirstOfDevice && (
-                        <span className="text-[9px] text-muted-foreground">
-                          {port.device.shortName}
-                        </span>
-                      )}
                     </div>
                   </th>
                 );
@@ -628,8 +653,8 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                   {/* Channel label cell */}
                   <td
                     className={cn(
-                      "sticky left-0 z-10 border-r p-1 text-xs bg-background transition-colors",
-                      (activeCell?.row === rowIndex || hoveredCell?.row === rowIndex) && "bg-primary/10"
+                      "sticky left-0 z-10 border-r p-1 text-xs transition-colors",
+                      (activeCell?.row === rowIndex || hoveredCell?.row === rowIndex) ? "bg-accent" : "bg-background"
                     )}
                   >
                     <div className="flex items-center gap-1">
