@@ -688,8 +688,10 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                         <Badge
                           variant="outline"
                           className={cn(
-                            "text-[10px] px-1 py-0 h-4 w-5 shrink-0 cursor-pointer hover:bg-accent flex items-center justify-center",
-                            channel.stereoSide && "font-semibold"
+                            "text-[10px] px-1 py-0 h-4 w-5 shrink-0 cursor-pointer flex items-center justify-center font-semibold",
+                            channel.stereoSide === "left" && "bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-100 dark:border-blue-700 dark:hover:bg-blue-800",
+                            channel.stereoSide === "right" && "bg-red-100 text-red-800 border-red-300 hover:bg-red-200 dark:bg-red-900 dark:text-red-100 dark:border-red-700 dark:hover:bg-red-800",
+                            channel.stereoSide === null && "bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:hover:bg-gray-600"
                           )}
                           onClick={() => handleToggleStereo(orig._id)}
                           title={channel.stereoSide ? "Click to switch to Mono" : "Click to switch to Stereo"}
@@ -792,9 +794,9 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
               <span>Available</span>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">M</Badge>
-              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">L</Badge>
-              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">R</Badge>
+              <Badge className="text-[10px] px-1 py-0 h-4 bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600">M</Badge>
+              <Badge className="text-[10px] px-1 py-0 h-4 bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900 dark:text-blue-100 dark:border-blue-700">L</Badge>
+              <Badge className="text-[10px] px-1 py-0 h-4 bg-red-100 text-red-800 border-red-300 dark:bg-red-900 dark:text-red-100 dark:border-red-700">R</Badge>
               <span>Click to toggle Mono/Stereo</span>
             </div>
           </div>

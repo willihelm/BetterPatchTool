@@ -10,8 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Download, Users } from "lucide-react";
 import { ThemeSwitcher } from "@/components/ui/theme-switcher";
-import { InputChannelTable } from "@/components/project/input-channel-table";
-import { OutputChannelTable } from "@/components/project/output-channel-table";
+import { PatchList } from "@/components/project/patch-list";
 import { IOOverview } from "@/components/project/io-overview";
 import { MixerSettingsDialog } from "@/components/project/mixer-settings-dialog";
 import { PatchMatrix } from "@/components/project/patch-matrix";
@@ -106,21 +105,16 @@ export default function ProjectPage() {
       {/* Main Content */}
       <main className="flex-1 container mx-auto px-4 py-4">
         <PortDataProvider projectId={projectId}>
-          <Tabs defaultValue="inputs" className="h-full">
+          <Tabs defaultValue="patch-list" className="h-full">
             <TabsList className="mb-4">
-              <TabsTrigger value="inputs">Input Patch List</TabsTrigger>
-              <TabsTrigger value="outputs">Output Patch List</TabsTrigger>
+              <TabsTrigger value="patch-list">Patch List</TabsTrigger>
               <TabsTrigger value="matrix">Patch Matrix</TabsTrigger>
               <TabsTrigger value="stageboxes">Stageboxes</TabsTrigger>
               <TabsTrigger value="io-devices">IO Devices</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="inputs" className="mt-0">
-              <InputChannelTable projectId={projectId} />
-            </TabsContent>
-
-            <TabsContent value="outputs" className="mt-0">
-              <OutputChannelTable projectId={projectId} />
+            <TabsContent value="patch-list" className="mt-0">
+              <PatchList projectId={projectId} />
             </TabsContent>
 
             <TabsContent value="matrix" className="mt-0">
