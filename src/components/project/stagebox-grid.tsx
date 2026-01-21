@@ -31,29 +31,32 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
 
   const mobileColumns = getMobileColumns(portsPerRow);
 
-  // For headphone ports, group into stereo pairs (L/R)
+  // For headphone ports, render as individual ports in regular grid
   if (isHeadphone) {
-    // Group by headphoneNumber
-    const pairs: { left: IOPort | undefined; right: IOPort | undefined; number: number }[] = [];
-    const portsByNumber = new Map<number, { left?: IOPort; right?: IOPort }>();
+    // Sort ports for consistent display
+    const sortedPorts = [...ports].sort((a, b) => {
+      const aNum = a.headphoneNumber ?? 0;
+      const bNum = b.headphoneNumber ?? 0;
+      if (aNum !== bNum) return aNum - bNum;
+      // Put left before right
+      const aIsLeft = a.subType === "headphone_left" ? 0 : 1;
+      const bIsLeft = b.subType === "headphone_left" ? 0 : 1;
+      return aIsLeft - bIsLeft;
+    });
 
-    for (const port of ports) {
-      const hpNum = port.headphoneNumber ?? 0;
-      if (!portsByNumber.has(hpNum)) {
-        portsByNumber.set(hpNum, {});
-      }
-      const pair = portsByNumber.get(hpNum)!;
-      if (port.subType === "headphone_left") {
-        pair.left = port;
-      } else if (port.subType === "headphone_right") {
-        pair.right = port;
-      }
+    // Split into rows - use mobile-friendly column count on small screens
+    const rows: IOPort[][] = [];
+    for (let i = 0; i < sortedPorts.length; i += portsPerRow) {
+      rows.push(sortedPorts.slice(i, i + portsPerRow));
     }
 
-    for (const [number, pair] of portsByNumber.entries()) {
-      pairs.push({ left: pair.left, right: pair.right, number });
+    // For mobile, we'll also create rows with fewer columns
+    const mobileRows: IOPort[][] = [];
+    for (let i = 0; i < sortedPorts.length; i += mobileColumns) {
+      mobileRows.push(sortedPorts.slice(i, i + mobileColumns));
     }
-    pairs.sort((a, b) => a.number - b.number);
+
+    const pairCount = sortedPorts.filter(p => p.subType === "headphone_left").length;
 
     return (
       <div className="mb-6">
@@ -62,7 +65,7 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <h4 className="font-medium text-sm sm:text-base">{device.name}</h4>
             <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
-              ({device.shortName}) - {pairs.length} HP {pairs.length === 1 ? "Pair" : "Pairs"}
+              ({device.shortName}) - {pairCount} HP {pairCount === 1 ? "Pair" : "Pairs"}
             </span>
           </div>
           <div
@@ -71,91 +74,133 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
           />
         </div>
 
-        {/* Headphone pairs grid - responsive with horizontal scroll on mobile */}
-        <div className="border rounded-lg overflow-x-auto">
-          <div
-            className="grid min-w-fit"
-            style={{
-              gridTemplateColumns: `repeat(${Math.min(pairs.length, 2)}, minmax(140px, 1fr))`,
-            }}
-          >
-            {pairs.map((pair) => {
-              const leftUsage = pair.left ? portUsageMap[pair.left._id] : undefined;
-              const rightUsage = pair.right ? portUsageMap[pair.right._id] : undefined;
-              return (
-                <div
-                  key={pair.number}
-                  className="border-r last:border-r-0 border-b last:border-b-0 p-2 sm:p-3"
-                  style={{
-                    borderLeftWidth: 3,
-                    borderLeftColor: device.color,
-                  }}
-                >
-                  <div className="text-xs sm:text-sm font-mono text-muted-foreground mb-1">
-                    HP{pair.number}
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    {/* Left channel */}
-                    <div className="text-center p-1 sm:p-1.5 bg-muted/30 rounded">
-                      <div className="text-xs text-muted-foreground">L</div>
-                      <div
-                        className={`text-xs sm:text-sm truncate ${
-                          leftUsage ? "text-foreground font-medium" : "text-muted-foreground/50"
-                        }`}
-                        title={leftUsage?.channelName}
-                      >
-                        {leftUsage?.channelName || "—"}
-                      </div>
+        {/* Mobile port grid - visible on small screens */}
+        <div className="border rounded-lg overflow-hidden sm:hidden">
+          {mobileRows.map((row, rowIndex) => (
+            <div
+              key={rowIndex}
+              className="grid border-b last:border-b-0"
+              style={{
+                gridTemplateColumns: `repeat(${mobileColumns}, minmax(0, 1fr))`,
+              }}
+            >
+              {row.map((port) => {
+                const usage = portUsageMap[port._id];
+                const isFirstInRow = sortedPorts.indexOf(port) % mobileColumns === 0;
+                return (
+                  <div
+                    key={port._id}
+                    className="border-r last:border-r-0 p-2 min-w-0"
+                    style={{
+                      borderLeftWidth: isFirstInRow ? 3 : undefined,
+                      borderLeftColor: isFirstInRow ? device.color : undefined,
+                    }}
+                  >
+                    <div className="text-xs font-mono text-muted-foreground truncate">
+                      {port.label}
                     </div>
-                    {/* Right channel */}
-                    <div className="text-center p-1 sm:p-1.5 bg-muted/30 rounded">
-                      <div className="text-xs text-muted-foreground">R</div>
-                      <div
-                        className={`text-xs sm:text-sm truncate ${
-                          rightUsage ? "text-foreground font-medium" : "text-muted-foreground/50"
-                        }`}
-                        title={rightUsage?.channelName}
-                      >
-                        {rightUsage?.channelName || "—"}
-                      </div>
+                    <div
+                      className={`text-sm truncate ${
+                        usage ? "text-foreground font-medium" : "text-muted-foreground/50"
+                      }`}
+                      title={usage?.channelName}
+                    >
+                      {usage?.channelName || "—"}
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+              {/* Fill empty cells in last row */}
+              {row.length < mobileColumns &&
+                Array.from({ length: mobileColumns - row.length }).map((_, i) => (
+                  <div
+                    key={`empty-${i}`}
+                    className="border-r last:border-r-0 p-2 bg-muted/30"
+                  />
+                ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop port grid - hidden on small screens */}
+        <div className="border rounded-lg overflow-hidden hidden sm:block">
+          {rows.map((row, rowIndex) => (
+            <div
+              key={rowIndex}
+              className="grid border-b last:border-b-0"
+              style={{
+                gridTemplateColumns: `repeat(${portsPerRow}, minmax(0, 1fr))`,
+              }}
+            >
+              {row.map((port) => {
+                const usage = portUsageMap[port._id];
+                const portIndex = sortedPorts.indexOf(port);
+                return (
+                  <div
+                    key={port._id}
+                    className="border-r last:border-r-0 p-1.5 min-w-0"
+                    style={{
+                      borderLeftWidth: portIndex % portsPerRow === 0 ? 3 : undefined,
+                      borderLeftColor: portIndex % portsPerRow === 0 ? device.color : undefined,
+                    }}
+                  >
+                    <div className="text-xs font-mono text-muted-foreground truncate">
+                      {port.label}
+                    </div>
+                    <div
+                      className={`text-sm truncate ${
+                        usage ? "text-foreground font-medium" : "text-muted-foreground/50"
+                      }`}
+                      title={usage?.channelName}
+                    >
+                      {usage?.channelName || "—"}
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Fill empty cells in last row */}
+              {row.length < portsPerRow &&
+                Array.from({ length: portsPerRow - row.length }).map((_, i) => (
+                  <div
+                    key={`empty-${i}`}
+                    className="border-r last:border-r-0 p-1.5 bg-muted/30"
+                  />
+                ))}
+            </div>
+          ))}
         </div>
       </div>
     );
   }
 
-  // For AES ports, group into stereo pairs (L/R)
+  // For AES ports, render as individual ports in regular grid
   if (isAes) {
-    // Group by aesNumber
-    const pairs: { left: IOPort | undefined; right: IOPort | undefined; number: number }[] = [];
-    const portsByNumber = new Map<number, { left?: IOPort; right?: IOPort }>();
-
-    for (const port of ports) {
-      const aesNum = port.aesNumber ?? 0;
-      if (!portsByNumber.has(aesNum)) {
-        portsByNumber.set(aesNum, {});
-      }
-      const pair = portsByNumber.get(aesNum)!;
-      if (port.subType === "aes_left") {
-        pair.left = port;
-      } else if (port.subType === "aes_right") {
-        pair.right = port;
-      }
-    }
-
-    for (const [number, pair] of portsByNumber.entries()) {
-      pairs.push({ left: pair.left, right: pair.right, number });
-    }
-    pairs.sort((a, b) => a.number - b.number);
+    // Sort ports for consistent display
+    const sortedPorts = [...ports].sort((a, b) => {
+      const aNum = a.aesNumber ?? 0;
+      const bNum = b.aesNumber ?? 0;
+      if (aNum !== bNum) return aNum - bNum;
+      // Put left before right
+      const aIsLeft = a.subType === "aes_left" ? 0 : 1;
+      const bIsLeft = b.subType === "aes_left" ? 0 : 1;
+      return aIsLeft - bIsLeft;
+    });
 
     // Determine if these are inputs or outputs based on first port
     const isInput = ports[0]?.type === "input";
-    const labelPrefix = isInput ? "AES" : "AESO";
+    const pairCount = sortedPorts.filter(p => p.subType === "aes_left").length;
+
+    // Split into rows - use mobile-friendly column count on small screens
+    const rows: IOPort[][] = [];
+    for (let i = 0; i < sortedPorts.length; i += portsPerRow) {
+      rows.push(sortedPorts.slice(i, i + portsPerRow));
+    }
+
+    // For mobile, we'll also create rows with fewer columns
+    const mobileRows: IOPort[][] = [];
+    for (let i = 0; i < sortedPorts.length; i += mobileColumns) {
+      mobileRows.push(sortedPorts.slice(i, i + mobileColumns));
+    }
 
     return (
       <div className="mb-6">
@@ -164,7 +209,7 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <h4 className="font-medium text-sm sm:text-base">{device.name}</h4>
             <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
-              ({device.shortName}) - {pairs.length} {labelPrefix} {pairs.length === 1 ? "Pair" : "Pairs"}
+              ({device.shortName}) - {pairCount} AES {pairCount === 1 ? "Pair" : "Pairs"}
             </span>
           </div>
           <div
@@ -173,59 +218,100 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
           />
         </div>
 
-        {/* AES pairs grid - responsive with horizontal scroll on mobile */}
-        <div className="border rounded-lg overflow-x-auto">
-          <div
-            className="grid min-w-fit"
-            style={{
-              gridTemplateColumns: `repeat(${Math.min(pairs.length, 2)}, minmax(140px, 1fr))`,
-            }}
-          >
-            {pairs.map((pair) => {
-              const leftUsage = pair.left ? portUsageMap[pair.left._id] : undefined;
-              const rightUsage = pair.right ? portUsageMap[pair.right._id] : undefined;
-              return (
-                <div
-                  key={pair.number}
-                  className="border-r last:border-r-0 border-b last:border-b-0 p-2 sm:p-3"
-                  style={{
-                    borderLeftWidth: 3,
-                    borderLeftColor: device.color,
-                  }}
-                >
-                  <div className="text-xs sm:text-sm font-mono text-muted-foreground mb-1">
-                    {labelPrefix}{pair.number}
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    {/* Left channel */}
-                    <div className="text-center p-1 sm:p-1.5 bg-muted/30 rounded">
-                      <div className="text-xs text-muted-foreground">L</div>
-                      <div
-                        className={`text-xs sm:text-sm truncate ${
-                          leftUsage ? "text-foreground font-medium" : "text-muted-foreground/50"
-                        }`}
-                        title={leftUsage?.channelName}
-                      >
-                        {leftUsage?.channelName || "—"}
-                      </div>
+        {/* Mobile port grid - visible on small screens */}
+        <div className="border rounded-lg overflow-hidden sm:hidden">
+          {mobileRows.map((row, rowIndex) => (
+            <div
+              key={rowIndex}
+              className="grid border-b last:border-b-0"
+              style={{
+                gridTemplateColumns: `repeat(${mobileColumns}, minmax(0, 1fr))`,
+              }}
+            >
+              {row.map((port) => {
+                const usage = portUsageMap[port._id];
+                const isFirstInRow = sortedPorts.indexOf(port) % mobileColumns === 0;
+                return (
+                  <div
+                    key={port._id}
+                    className="border-r last:border-r-0 p-2 min-w-0"
+                    style={{
+                      borderLeftWidth: isFirstInRow ? 3 : undefined,
+                      borderLeftColor: isFirstInRow ? device.color : undefined,
+                    }}
+                  >
+                    <div className="text-xs font-mono text-muted-foreground truncate">
+                      {port.label}
                     </div>
-                    {/* Right channel */}
-                    <div className="text-center p-1 sm:p-1.5 bg-muted/30 rounded">
-                      <div className="text-xs text-muted-foreground">R</div>
-                      <div
-                        className={`text-xs sm:text-sm truncate ${
-                          rightUsage ? "text-foreground font-medium" : "text-muted-foreground/50"
-                        }`}
-                        title={rightUsage?.channelName}
-                      >
-                        {rightUsage?.channelName || "—"}
-                      </div>
+                    <div
+                      className={`text-sm truncate ${
+                        usage ? "text-foreground font-medium" : "text-muted-foreground/50"
+                      }`}
+                      title={usage?.channelName}
+                    >
+                      {usage?.channelName || "—"}
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+              {/* Fill empty cells in last row */}
+              {row.length < mobileColumns &&
+                Array.from({ length: mobileColumns - row.length }).map((_, i) => (
+                  <div
+                    key={`empty-${i}`}
+                    className="border-r last:border-r-0 p-2 bg-muted/30"
+                  />
+                ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop port grid - hidden on small screens */}
+        <div className="border rounded-lg overflow-hidden hidden sm:block">
+          {rows.map((row, rowIndex) => (
+            <div
+              key={rowIndex}
+              className="grid border-b last:border-b-0"
+              style={{
+                gridTemplateColumns: `repeat(${portsPerRow}, minmax(0, 1fr))`,
+              }}
+            >
+              {row.map((port) => {
+                const usage = portUsageMap[port._id];
+                const portIndex = sortedPorts.indexOf(port);
+                return (
+                  <div
+                    key={port._id}
+                    className="border-r last:border-r-0 p-1.5 min-w-0"
+                    style={{
+                      borderLeftWidth: portIndex % portsPerRow === 0 ? 3 : undefined,
+                      borderLeftColor: portIndex % portsPerRow === 0 ? device.color : undefined,
+                    }}
+                  >
+                    <div className="text-xs font-mono text-muted-foreground truncate">
+                      {port.label}
+                    </div>
+                    <div
+                      className={`text-sm truncate ${
+                        usage ? "text-foreground font-medium" : "text-muted-foreground/50"
+                      }`}
+                      title={usage?.channelName}
+                    >
+                      {usage?.channelName || "—"}
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Fill empty cells in last row */}
+              {row.length < portsPerRow &&
+                Array.from({ length: portsPerRow - row.length }).map((_, i) => (
+                  <div
+                    key={`empty-${i}`}
+                    className="border-r last:border-r-0 p-1.5 bg-muted/30"
+                  />
+                ))}
+            </div>
+          ))}
         </div>
       </div>
     );
