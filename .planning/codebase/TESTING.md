@@ -28,7 +28,7 @@ bun run test:e2e:ui      # Run E2E tests with UI
 **Location:**
 - Unit tests: `tests/` directory parallel to `src/`
 - Convex tests: Colocated in `convex/` directory with source files
-- E2E tests: `e2e/` directory at root level
+- E2E tests: `tests/e2e/` directory
 
 **Naming:**
 - Unit tests: `<module>.test.ts` (e.g., `string-utils.test.ts`, `date-utils.test.ts`)
@@ -48,7 +48,7 @@ convex/
 ├── outputChannels.test.ts    # Output channel CRUD, move
 └── projects.test.ts          # Project CRUD, duplicate, archive
 
-e2e/
+tests/e2e/
 ├── dashboard.spec.ts         # Dashboard navigation
 ├── project-creation.spec.ts  # Create project flow
 ├── project-workflow.spec.ts  # Tab navigation, views
@@ -152,7 +152,7 @@ describe("projects", () => {
 
 **E2E Test Pattern:**
 ```typescript
-// From e2e/dashboard.spec.ts
+// From tests/e2e/dashboard.spec.ts
 import { test, expect } from "@playwright/test";
 
 test.describe("Dashboard", () => {
@@ -229,7 +229,7 @@ async function setupProject(t: ReturnType<typeof convexTest>) {
 
 **E2E Fixtures:**
 ```typescript
-// From e2e/input-channels.spec.ts
+// From tests/e2e/input-channels.spec.ts
 async function createProject(page: import("@playwright/test").Page, title: string) {
   await page.goto("/projects/new");
   await page.getByLabel(/Title/i).fill(title);
@@ -269,7 +269,7 @@ async function createProject(page: import("@playwright/test").Page, title: strin
 
 **E2E Tests:**
 - Scope: User workflows from browser perspective
-- Location: `e2e/*.spec.ts`
+- Location: `tests/e2e/*.spec.ts`
 - Approach: Playwright browser automation with page object queries
 - Framework: Playwright
 - Example: Navigate to dashboard, click New Project, fill form, verify navigation

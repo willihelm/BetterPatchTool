@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "updated": 1768993216017,
+  "files": {
+    "/Users/wilhelmduck/git/BetterPatchTool/playwright.config.ts": {
+      "exports": [
+        "default",
+        "defineConfig"
+      ],
+      "imports": [
+        "@playwright/test"
+      ],
+      "indexed": 1768993216017
+    }
+  }
+}

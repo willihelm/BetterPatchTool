@@ -25,8 +25,9 @@
 │   ├── _generated/             # Auto-generated Convex types (DO NOT EDIT)
 │   ├── *.test.ts               # Convex unit tests
 │   └── convex.json             # Convex deployment config
-├── e2e/                        # Playwright E2E tests
-├── tests/                      # Vitest unit tests (lib utilities)
+├── tests/                      # Vitest unit tests & E2E tests
+│   ├── e2e/                    # Playwright E2E tests
+│   └── lib/                    # Unit tests (lib utilities)
 ├── .env.local                  # Environment variables (not committed)
 ├── next.config.ts              # Next.js configuration
 ├── tsconfig.json               # TypeScript configuration
@@ -118,14 +119,14 @@
 - Files: projects.test.ts, inputChannels.test.ts, outputChannels.test.ts
 - Pattern: Test CRUD, mutations (move, insert, delete), edge cases (empty projects, invalid orders)
 
-**e2e/:**
+**tests/e2e/:**
 - Purpose: Playwright end-to-end tests
 - Files: dashboard.spec.ts, project-creation.spec.ts, project-workflow.spec.ts, input-channels.spec.ts
 - Pattern: Test full workflows (create project → edit channels → verify state)
 
-**tests/:**
+**tests/lib/:**
 - Purpose: Unit tests for frontend utilities (Vitest)
-- Files: setup.ts (jest-dom), lib/string-utils.test.ts, lib/date-utils.test.ts
+- Files: setup.ts (jest-dom), string-utils.test.ts, date-utils.test.ts
 - Pattern: Test incrementTrailingNumber, formatDate, formatDistanceToNow
 
 ## Key File Locations
@@ -152,7 +153,7 @@
 **Testing:**
 - `convex/projects.test.ts`: Project CRUD tests
 - `convex/inputChannels.test.ts`: Channel operation tests
-- `e2e/project-workflow.spec.ts`: Full user workflow tests
+- `tests/e2e/project-workflow.spec.ts`: Full user workflow tests
 
 ## Naming Conventions
 
@@ -200,8 +201,8 @@
 
 **Testing:**
 - Convex function tests: `convex/{module}.test.ts`
-- React component tests (if added): `tests/` with Vitest + React Testing Library
-- E2E tests: `e2e/{feature}.spec.ts` with Playwright
+- React component tests (if added): `tests/lib/` with Vitest + React Testing Library
+- E2E tests: `tests/e2e/{feature}.spec.ts` with Playwright
 
 ## Special Directories
 

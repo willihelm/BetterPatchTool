@@ -82,7 +82,7 @@
 
 **No E2E Tests for Authorization:**
 - Issue: E2E tests exist but don't test cross-user access or permission violations
-- Files: `e2e/` directory (all specs)
+- Files: `tests/e2e/` directory (all specs)
 - Gap: No test for "user A cannot access user B's project"
 - Risk: Authorization bypass could go undetected
 - Priority: High - add tests for access control violations

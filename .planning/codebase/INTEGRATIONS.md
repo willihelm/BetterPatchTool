@@ -207,7 +207,7 @@ interface OutputChannel {
 - Coverage: Project CRUD/duplication, channel operations, move operations
 
 **E2E Test Suite:**
-- Location: `e2e/` directory
+- Location: `tests/e2e/` directory
 - Framework: Playwright 1.57
 - Tests: dashboard navigation, project creation, project workflow, input channel editing
 - Config: `playwright.config.ts` - Chromium only, baseURL: `http://localhost:3000`
