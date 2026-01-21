@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": 1769012499434,
+  "updated": 1769013293109,
   "files": {
     "/Users/wilhelmduck/git/BetterPatchTool/playwright.config.ts": {
       "exports": [
@@ -30,6 +30,25 @@
         "./_generated/dataModel"
       ],
       "indexed": 1769012499434
+    },
+    "/Users/wilhelmduck/git/BetterPatchTool/src/components/project/patch-matrix.tsx": {
+      "exports": [
+        "PatchMatrix"
+      ],
+      "imports": [
+        "react",
+        "convex/react",
+        "../../../convex/_generated/api",
+        "../../../convex/_generated/dataModel",
+        "@/components/ui/button",
+        "@/components/ui/dropdown-menu",
+        "@/components/ui/badge",
+        "@/lib/utils",
+        "lucide-react",
+        "./port-data-context",
+        "@/components/ui/input"
+      ],
+      "indexed": 1769013293109
     }
   }
 }

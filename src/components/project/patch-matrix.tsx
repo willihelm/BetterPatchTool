@@ -36,7 +36,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
     mode: "patch" | "unpatch";
   } | null>(null);
   const [isShiftHeld, setIsShiftHeld] = useState(false);
-  const [editingChannel, setEditingChannel] = useState<{ id: string; name: string } | null>(null);
+  const [editingChannel, setEditingChannel] = useState<{ id: string; name: string; stereoSide: "left" | "right" | null } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Queries
@@ -284,6 +284,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (!activeCell || !channels?.length || !visiblePorts.length) return;
+      if (editingChannel) return;
 
       const { row, col } = activeCell;
 
@@ -320,7 +321,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           break;
       }
     },
-    [activeCell, channels, visiblePorts, handleCellClick]
+    [activeCell, channels, visiblePorts, handleCellClick, editingChannel]
   );
 
   // Handle toggling stereo mode for a channel
@@ -646,7 +647,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                 ? (orig as { source?: string }).source
                 : (orig as { busName?: string }).busName;
 
-              const isEditingThisChannel = editingChannel?.id === orig._id;
+              const isEditingThisChannel = editingChannel?.id === orig._id && editingChannel?.stereoSide === channel.stereoSide;
 
               return (
                 <tr key={channel._id}>
@@ -668,6 +669,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                           defaultValue={editingChannel.name}
                           onBlur={(e) => handleSaveChannelName(orig._id, e.target.value)}
                           onKeyDown={(e) => {
+                            e.stopPropagation();
                             if (e.key === "Enter") {
                               handleSaveChannelName(orig._id, e.currentTarget.value);
                             } else if (e.key === "Escape") {
@@ -678,7 +680,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                       ) : (
                         <span
                           className="text-muted-foreground truncate flex-1 min-w-0 cursor-text hover:text-foreground"
-                          onClick={() => setEditingChannel({ id: orig._id, name: channelName || "" })}
+                          onClick={() => setEditingChannel({ id: orig._id, name: channelName || "", stereoSide: channel.stereoSide })}
                         >
                           {channelName || "-"}
                         </span>
