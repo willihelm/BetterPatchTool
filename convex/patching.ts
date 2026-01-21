@@ -352,7 +352,7 @@ export const patchInputChannel = mutation({
       if (portRight.type !== "input") throw new Error("Cannot assign output port to input channel");
     }
 
-    const updates: { ioPortId?: Id<"ioPorts"> | undefined; ioPortIdRight?: Id<"ioPorts"> | undefined; patched?: boolean } = {};
+    const updates: { ioPortId?: Id<"ioPorts"> | undefined; ioPortIdRight?: Id<"ioPorts"> | undefined } = {};
 
     // Handle left/mono port
     if (args.ioPortId === null) {
@@ -367,10 +367,6 @@ export const patchInputChannel = mutation({
     } else if (args.ioPortIdRight !== undefined) {
       updates.ioPortIdRight = args.ioPortIdRight;
     }
-
-    // Update patched status based on whether any port is assigned
-    const newIoPortId = args.ioPortId === null ? undefined : (args.ioPortId ?? channel.ioPortId);
-    updates.patched = newIoPortId !== undefined;
 
     await ctx.db.patch(args.channelId, updates);
   },
@@ -515,7 +511,6 @@ export const autoPatchInputChannels = mutation({
         await ctx.db.patch(channel._id, {
           ioPortId: leftPort._id,
           ioPortIdRight: rightPort._id,
-          patched: true,
         });
 
         usedPorts.add(leftPort._id);
@@ -540,7 +535,6 @@ export const autoPatchInputChannels = mutation({
         const port = sortedPorts[portIndex];
         await ctx.db.patch(channel._id, {
           ioPortId: port._id,
-          patched: true,
         });
 
         usedPorts.add(port._id);
@@ -709,7 +703,6 @@ export const batchPatchChannels = mutation({
         if (patch.ioPortId === null) {
           await ctx.db.patch(channelId, {
             ioPortId: undefined,
-            patched: false,
           });
         } else {
           const portId = patch.ioPortId as Id<"ioPorts">;
@@ -718,7 +711,6 @@ export const batchPatchChannels = mutation({
 
           await ctx.db.patch(channelId, {
             ioPortId: portId,
-            patched: true,
           });
         }
       } else {
@@ -756,7 +748,6 @@ export const clearPatches = mutation({
         await ctx.db.patch(channelId, {
           ioPortId: undefined,
           ioPortIdRight: undefined,
-          patched: false,
         });
         cleared++;
       }

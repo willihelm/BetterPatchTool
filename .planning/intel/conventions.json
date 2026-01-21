@@ -1,7 +1,13 @@
 {
   "version": 1,
-  "updated": 1768993216018,
-  "naming": {},
+  "updated": 1769012499434,
+  "naming": {
+    "exports": {
+      "dominant": "camelCase",
+      "count": 10,
+      "percentage": 100
+    }
+  },
   "directories": {},
   "suffixes": {}
 }

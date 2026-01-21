@@ -1,8 +1,10 @@
-# Codebase Intelligence
+# Codebase Intelligence Summary
 
-**Indexed entities:** 1
-**Last updated:** 2026-01-21
+Last updated: 2026-01-21T16:21:39.435Z
+Indexed files: 2
 
-## Module Types
+## Naming Conventions
 
-- **Config**: 1 files
+- Export naming: camelCase (100% of 10 exports)
+
+Total exports: 10

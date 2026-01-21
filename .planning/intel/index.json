@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": 1768993216017,
+  "updated": 1769012499434,
   "files": {
     "/Users/wilhelmduck/git/BetterPatchTool/playwright.config.ts": {
       "exports": [
@@ -11,6 +11,25 @@
         "@playwright/test"
       ],
       "indexed": 1768993216017
+    },
+    "/Users/wilhelmduck/git/BetterPatchTool/convex/patching.ts": {
+      "exports": [
+        "getAllPatchingData",
+        "getPortUsageMap",
+        "getAvailablePorts",
+        "patchInputChannel",
+        "patchOutputChannel",
+        "autoPatchInputChannels",
+        "autoPatchOutputChannels",
+        "batchPatchChannels",
+        "clearPatches"
+      ],
+      "imports": [
+        "convex/values",
+        "./_generated/server",
+        "./_generated/dataModel"
+      ],
+      "indexed": 1769012499434
     }
   }
 }
