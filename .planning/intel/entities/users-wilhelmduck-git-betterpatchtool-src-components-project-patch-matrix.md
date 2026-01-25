@@ -9,25 +9,22 @@ status: active
 
 ## Purpose
 
-Interactive patch matrix UI component for managing audio channel routing between inputs/outputs and stageboxes. Provides spreadsheet-like navigation, diagonal patching selection, stereo channel expansion, device filtering, and real-time collaboration via Convex mutations.
+Interactive matrix component for creating and managing audio patch connections between input/output channels and IO ports. Implements spreadsheet-like keyboard navigation, diagonal patching, device filtering, and real-time stereo channel management.
 
 ## Exports
 
-- `PatchMatrix`: React component that renders the patching matrix interface with filtering, selection, and editing capabilities
+- **PatchMatrix**: React component that renders an interactive patch matrix UI with toggle between input/output channels, device filtering, cell navigation, and batch diagonal patching operations.
 
 ## Dependencies
 
-- react (hooks: useState, useRef, useCallback, useEffect, useMemo)
-- convex/react (useQuery, useMutation)
-- [[../../../convex/_generated/api]]
-- [[../../../convex/_generated/dataModel]]
-- [[../ui/button]]
-- [[../ui/dropdown-menu]]
-- [[../ui/badge]]
-- [[../ui/input]]
-- [[../../lib/utils]] (cn)
-- lucide-react (Check, Filter, ChevronDown icons)
-- [[./port-data-context]]
+- [[port-data-context]]: usePortData hook providing input/output port groups
+- [[clear-patches-dialog]]: ClearPatchesDialog component for bulk patch clearing
+- [[clear-device-patches-dialog]]: ClearDevicePatchesDialog component for device-specific patch clearing
+- React hooks (useState, useRef, useCallback, useEffect, useMemo)
+- convex/react: useQuery, useMutation for real-time database operations
+- @/components/ui/{button, dropdown-menu, badge, input}: shadcn/ui components
+- @/lib/utils: cn utility for className merging
+- lucide-react: Check, Filter, ChevronDown, Trash2, X icons
 
 ## Used By
 
@@ -35,8 +32,4 @@ TBD
 
 ## Notes
 
-- Manages complex state: active/hovered cells, diagonal selection anchors, shift key tracking, editing mode
-- Expands stereo channels into L/R rows for display when `true_stereo` mode enabled
-- Implements spreadsheet-style navigation and batch patching via drag/shift-click
-- Supports device filtering and unassigned channel filtering
-- Uses portal rendering for dropdown menus
+Complex state management for multi-cell interactions including diagonal anchor tracking, Shift+Click diagonal patching, device selection persistence across data updates, and stereo channel L/R row expansion. Matrix cells implement crosshair highlighting and visual feedback for assigned/used/available port states.

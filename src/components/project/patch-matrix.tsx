@@ -15,9 +15,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Check, Filter, ChevronDown } from "lucide-react";
+import { Check, Filter, ChevronDown, Trash2, X } from "lucide-react";
 import { usePortData } from "./port-data-context";
 import { Input } from "@/components/ui/input";
+import { ClearPatchesDialog } from "./clear-patches-dialog";
+import { ClearDevicePatchesDialog } from "./clear-device-patches-dialog";
 
 interface PatchMatrixProps {
   projectId: Id<"projects">;
@@ -37,6 +39,8 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   } | null>(null);
   const [isShiftHeld, setIsShiftHeld] = useState(false);
   const [editingChannel, setEditingChannel] = useState<{ id: string; name: string; stereoSide: "left" | "right" | null } | null>(null);
+  const [showGlobalClearDialog, setShowGlobalClearDialog] = useState(false);
+  const [deviceToClear, setDeviceToClear] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Queries
@@ -59,6 +63,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   const toggleOutputStereo = useMutation(api.outputChannels.toggleStereo);
   const updateInputChannel = useMutation(api.inputChannels.update);
   const updateOutputChannel = useMutation(api.outputChannels.update);
+  const clearPatches = useMutation(api.patching.clearPatches);
 
   const rawChannels = channelType === "input" ? inputChannels : outputChannels;
 
@@ -349,6 +354,52 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
     [channelType, updateInputChannel, updateOutputChannel]
   );
 
+  // Calculate count of channels with patches
+  const getGlobalClearCount = useMemo(() => {
+    return rawChannels?.filter(ch => ch.ioPortId || ch.ioPortIdRight).length ?? 0;
+  }, [rawChannels]);
+
+  // Get info about which channels would be cleared for a specific device
+  const getDeviceClearInfo = useCallback((deviceId: string) => {
+    const portGroup = filteredPortGroups.find(g => g.device._id === deviceId);
+    if (!portGroup) return { count: 0, channelIds: [] };
+
+    const devicePortIds = new Set(portGroup.ports.map(p => p._id));
+    const affectedChannels = rawChannels?.filter(ch =>
+      (ch.ioPortId && devicePortIds.has(ch.ioPortId)) ||
+      (ch.ioPortIdRight && devicePortIds.has(ch.ioPortIdRight))
+    ) ?? [];
+
+    return {
+      count: affectedChannels.length,
+      channelIds: affectedChannels.map(ch => ch._id)
+    };
+  }, [filteredPortGroups, rawChannels]);
+
+  // Handle global clear of all patches
+  const handleGlobalClear = useCallback(async () => {
+    const channelIds = rawChannels?.map(ch => ch._id) ?? [];
+    if (channelType === "input") {
+      await clearPatches({ inputChannelIds: channelIds as Id<"inputChannels">[] });
+    } else {
+      await clearPatches({ outputChannelIds: channelIds as Id<"outputChannels">[] });
+    }
+    setShowGlobalClearDialog(false);
+  }, [channelType, rawChannels, clearPatches]);
+
+  // Handle device-specific clear of patches
+  const handleDeviceClear = useCallback(async (deviceId: string) => {
+    const { channelIds } = getDeviceClearInfo(deviceId);
+    if (channelIds.length === 0) return;
+
+    if (channelType === "input") {
+      await clearPatches({ inputChannelIds: channelIds as Id<"inputChannels">[] });
+    } else {
+      await clearPatches({ outputChannelIds: channelIds as Id<"outputChannels">[] });
+    }
+    setDeviceToClear(null);
+  }, [channelType, getDeviceClearInfo, clearPatches]);
+
   // Initialize active cell when data loads
   useEffect(() => {
     if (!activeCell && channels && channels.length > 0 && visiblePorts.length > 0) {
@@ -414,6 +465,49 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
       );
     }
   }, [visiblePorts.length, activeCell]);
+
+  // Calculate device spans for two-row header
+  const deviceSpans = useMemo(() => {
+    const spans: Array<{
+      deviceId: string;
+      device: typeof visiblePorts[0]['device'];
+      portCount: number;
+    }> = [];
+
+    let currentDeviceId: string | null = null;
+    let currentDevice: typeof visiblePorts[0]['device'] | null = null;
+    let currentCount = 0;
+
+    visiblePorts.forEach((port) => {
+      if (port.device._id !== currentDeviceId) {
+        // Save previous device span
+        if (currentDeviceId !== null && currentDevice !== null) {
+          spans.push({
+            deviceId: currentDeviceId,
+            device: currentDevice,
+            portCount: currentCount,
+          });
+        }
+        // Start new device
+        currentDeviceId = port.device._id;
+        currentDevice = port.device;
+        currentCount = 1;
+      } else {
+        currentCount++;
+      }
+    });
+
+    // Add last device
+    if (currentDeviceId !== null && currentDevice !== null) {
+      spans.push({
+        deviceId: currentDeviceId,
+        device: currentDevice,
+        portCount: currentCount,
+      });
+    }
+
+    return spans;
+  }, [visiblePorts]);
 
   // Device selection helper functions
   const toggleDevice = useCallback((deviceId: string) => {
@@ -482,6 +576,16 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
             onClick={() => setChannelType("output")}
           >
             Output Channels
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowGlobalClearDialog(true)}
+            disabled={getGlobalClearCount === 0}
+            className="text-destructive"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Clear All Patches
           </Button>
         </div>
         <div className="flex items-center gap-4">
@@ -574,13 +678,16 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           >
         <table className="w-full border-separate border-spacing-0">
           <thead className="sticky top-0 z-20 bg-background">
+            {/* Row 1: Device Headers */}
             <tr>
-              {/* Channel header cell - corner cell with FROM/TO arrow indicator */}
-              <th className="sticky left-0 top-0 z-30 bg-muted border-b border-r p-2 text-xs font-medium min-w-[180px] h-[72px]">
+              {/* Corner cell with rowspan="2" */}
+              <th
+                rowSpan={2}
+                className="sticky left-0 top-0 z-30 bg-muted border-b border-r p-2 text-xs font-medium min-w-[180px] h-[72px]"
+              >
                 <div className="relative h-full">
                   {channelType === "input" ? (
                     <>
-                      {/* Input: FROM ports TO channels */}
                       <div className="absolute bottom-6 right-0 flex items-end gap-1">
                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">From</span>
                       </div>
@@ -594,7 +701,6 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                     </>
                   ) : (
                     <>
-                      {/* Output: FROM channels TO ports */}
                       <div className="absolute bottom-6 right-0 flex items-end gap-1">
                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">To</span>
                       </div>
@@ -609,9 +715,47 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                   )}
                 </div>
               </th>
-              {/* Port headers */}
+
+              {/* Device headers with colspan */}
+              {deviceSpans.map((span) => {
+                const clearInfo = getDeviceClearInfo(span.deviceId);
+                return (
+                  <th
+                    key={span.deviceId}
+                    colSpan={span.portCount}
+                    className="border-b border-l-2 p-2 bg-muted text-center"
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      {/* Device name and clear button */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">{span.device.shortName}</span>
+                        {clearInfo.count > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeviceToClear(span.deviceId)}
+                            className="h-5 w-5 p-0"
+                            title={`Clear ${clearInfo.count} patch${clearInfo.count !== 1 ? 'es' : ''}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Color bar - reused from stagebox view */}
+                      <div
+                        className="w-full h-2 rounded"
+                        style={{ backgroundColor: span.device.color }}
+                      />
+                    </div>
+                  </th>
+                );
+              })}
+            </tr>
+
+            {/* Row 2: Port Labels */}
+            <tr>
               {visiblePorts.map((port, colIndex) => {
-                // Check if this is the first port of a device group
                 const isFirstOfDevice =
                   colIndex === 0 ||
                   visiblePorts[colIndex - 1]?.device._id !== port.device._id;
@@ -622,16 +766,12 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                     className={cn(
                       "border-b p-2 text-center text-xs font-medium min-w-[50px] bg-muted transition-colors",
                       isFirstOfDevice && "border-l-2",
-                      (activeCell?.col === colIndex || hoveredCell?.col === colIndex) && "bg-accent"
+                      activeCell?.col === colIndex ? "bg-accent" : hoveredCell?.col === colIndex ? "bg-muted/40" : ""
                     )}
                   >
-                    <div className="flex flex-col items-center gap-1">
-                      <span
-                        className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: port.device.color }}
-                      />
-                      <span className="font-mono text-[10px]">{port.label}</span>
-                    </div>
+                    <span className="font-mono text-[10px]">
+                      {port.label.replace(`${port.device.shortName}-`, "")}
+                    </span>
                   </th>
                 );
               })}
@@ -655,7 +795,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                   <td
                     className={cn(
                       "sticky left-0 z-10 border-r p-1 text-xs transition-colors",
-                      (activeCell?.row === rowIndex || hoveredCell?.row === rowIndex) ? "bg-accent" : "bg-background"
+                      activeCell?.row === rowIndex ? "bg-accent" : hoveredCell?.row === rowIndex ? "bg-muted/40" : "bg-background"
                     )}
                   >
                     <div className="flex items-center gap-1">
@@ -738,14 +878,16 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                           isAnchor && "ring-2 ring-amber-500 bg-amber-100/50 dark:bg-amber-900/30",
                           !isAnchor && isInDiagonalPreview && "bg-primary/25",
                           !isAnchor && !isInDiagonalPreview && (
-                            isAssigned
+                            isHovered
+                              ? "bg-primary/15"
+                              : isInCrosshair && isAssigned
+                              ? "bg-primary/30"
+                              : isInCrosshair
+                              ? "bg-muted/40"
+                              : isAssigned
                               ? "bg-primary/20"
                               : isUsedByOther
                               ? "bg-muted/30"
-                              : isHovered
-                              ? "bg-primary/15"
-                              : isInCrosshair
-                              ? "bg-muted/40"
                               : "hover:bg-muted/50"
                           )
                         )}
@@ -804,6 +946,31 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           </div>
         </>
       )}
+
+      {/* Clear patches dialogs */}
+      <ClearPatchesDialog
+        open={showGlobalClearDialog}
+        onOpenChange={setShowGlobalClearDialog}
+        channelType={channelType}
+        channelCount={getGlobalClearCount}
+        onConfirm={handleGlobalClear}
+      />
+
+      {deviceToClear && (() => {
+        const device = filteredPortGroups.find(g => g.device._id === deviceToClear)?.device;
+        const clearInfo = getDeviceClearInfo(deviceToClear);
+        return device ? (
+          <ClearDevicePatchesDialog
+            open={true}
+            onOpenChange={(open) => !open && setDeviceToClear(null)}
+            deviceName={device.name}
+            deviceColor={device.color}
+            channelType={channelType}
+            channelCount={clearInfo.count}
+            onConfirm={() => handleDeviceClear(deviceToClear)}
+          />
+        ) : null;
+      })()}
     </div>
   );
 }

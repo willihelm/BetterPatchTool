@@ -1,14 +1,14 @@
 # Codebase Intelligence Summary
 
-Last updated: 2026-01-21T16:34:53.110Z
-Indexed files: 3
+Last updated: 2026-01-21T21:46:58.965Z
+Indexed files: 5
 
 ## Naming Conventions
 
-- Export naming: camelCase (91% of 10 exports)
+- Export naming: camelCase (77% of 10 exports)
 
 ## Key Directories
 
-- `components/`: UI components (1 files)
+- `components/`: UI components (3 files)
 
-Total exports: 11
+Total exports: 13

@@ -1,17 +1,17 @@
 {
   "version": 1,
-  "updated": 1769013293109,
+  "updated": 1769032018964,
   "naming": {
     "exports": {
       "dominant": "camelCase",
       "count": 10,
-      "percentage": 91
+      "percentage": 77
     }
   },
   "directories": {
     "components": {
       "purpose": "UI components",
-      "files": 1
+      "files": 3
     }
   },
   "suffixes": {}

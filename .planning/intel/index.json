@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": 1769013293109,
+  "updated": 1769032018964,
   "files": {
     "/Users/wilhelmduck/git/BetterPatchTool/playwright.config.ts": {
       "exports": [
@@ -46,9 +46,35 @@
         "@/lib/utils",
         "lucide-react",
         "./port-data-context",
-        "@/components/ui/input"
+        "@/components/ui/input",
+        "./clear-patches-dialog",
+        "./clear-device-patches-dialog"
       ],
-      "indexed": 1769013293109
+      "indexed": 1769032018964
+    },
+    "/Users/wilhelmduck/git/BetterPatchTool/src/components/project/clear-patches-dialog.tsx": {
+      "exports": [
+        "ClearPatchesDialog"
+      ],
+      "imports": [
+        "react",
+        "@/components/ui/button",
+        "@/components/ui/dialog",
+        "@/components/ui/input",
+        "@/components/ui/label"
+      ],
+      "indexed": 1769029730419
+    },
+    "/Users/wilhelmduck/git/BetterPatchTool/src/components/project/clear-device-patches-dialog.tsx": {
+      "exports": [
+        "ClearDevicePatchesDialog"
+      ],
+      "imports": [
+        "react",
+        "@/components/ui/button",
+        "@/components/ui/dialog"
+      ],
+      "indexed": 1769029634307
     }
   }
 }
