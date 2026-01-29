@@ -723,12 +723,12 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                   <th
                     key={span.deviceId}
                     colSpan={span.portCount}
-                    className="border-b border-l-2 p-2 bg-muted text-center"
+                    className="border-b border-l-2 p-0 bg-muted"
                   >
-                    <div className="flex flex-col items-center gap-2">
-                      {/* Device name and clear button */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold">{span.device.shortName}</span>
+                    <div className="flex flex-col gap-1">
+                      {/* Device name */}
+                      <div className="flex items-center gap-2 px-2 pt-2">
+                        <span className="text-sm font-semibold whitespace-nowrap">{span.device.name}</span>
                         {clearInfo.count > 0 && (
                           <Button
                             variant="ghost"
@@ -742,9 +742,9 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                         )}
                       </div>
 
-                      {/* Color bar - reused from stagebox view */}
+                      {/* Color bar - full width */}
                       <div
-                        className="w-full h-2 rounded"
+                        className="h-2 rounded-sm mx-1 mb-1"
                         style={{ backgroundColor: span.device.color }}
                       />
                     </div>
@@ -766,7 +766,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                     className={cn(
                       "border-b p-2 text-center text-xs font-medium min-w-[50px] bg-muted transition-colors",
                       isFirstOfDevice && "border-l-2",
-                      activeCell?.col === colIndex ? "bg-accent" : hoveredCell?.col === colIndex ? "bg-muted/40" : ""
+                      activeCell?.col === colIndex && "bg-accent"
                     )}
                   >
                     <span className="font-mono text-[10px]">
@@ -795,7 +795,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                   <td
                     className={cn(
                       "sticky left-0 z-10 border-r p-1 text-xs transition-colors",
-                      activeCell?.row === rowIndex ? "bg-accent" : hoveredCell?.row === rowIndex ? "bg-muted/40" : "bg-background"
+                      activeCell?.row === rowIndex ? "bg-accent" : hoveredCell?.row === rowIndex ? "bg-muted" : "bg-background"
                     )}
                   >
                     <div className="flex items-center gap-1">
