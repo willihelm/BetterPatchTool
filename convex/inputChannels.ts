@@ -262,6 +262,25 @@ export const toggleStereo = mutation({
   },
 });
 
+// Clear all "patched" checkboxes for a project
+export const clearAllPatched = mutation({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, args) => {
+    const channels = await ctx.db
+      .query("inputChannels")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+
+    const patchedChannels = channels.filter((c) => c.patched);
+
+    for (const channel of patchedChannels) {
+      await ctx.db.patch(channel._id, { patched: false });
+    }
+
+    return { cleared: patchedChannels.length };
+  },
+});
+
 // Kanal nach oben/unten verschieben
 export const moveChannel = mutation({
   args: {

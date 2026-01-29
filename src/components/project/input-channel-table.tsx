@@ -57,6 +57,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
   const moveChannel = useMutation(api.inputChannels.moveChannel);
   const patchChannel = useMutation(api.patching.patchInputChannel);
   const toggleStereoChannel = useMutation(api.inputChannels.toggleStereo);
+  const clearAllPatched = useMutation(api.inputChannels.clearAllPatched);
 
   const [portDropdownOpen, setPortDropdownOpen] = useState<number | null>(null);
   const [autoPatchDialogOpen, setAutoPatchDialogOpen] = useState(false);
@@ -302,6 +303,12 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
     return activeCell?.rowIndex === rowIndex && activeCell?.columnId === columnId;
   };
 
+  const patchedCount = channels?.filter((c) => c.patched).length ?? 0;
+
+  const handleClearAllPatched = async () => {
+    await clearAllPatched({ projectId });
+  };
+
   if (channels === undefined) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -390,7 +397,20 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
               <TableHead className="w-24">Cable</TableHead>
               <TableHead className="w-24">Stand</TableHead>
               <TableHead>Notes</TableHead>
-              <TableHead className="w-16 text-center">Patched</TableHead>
+              <TableHead className="w-16 text-center">
+                <div className="flex items-center justify-center gap-1">
+                  <span>Patched</span>
+                  {patchedCount > 0 && (
+                    <button
+                      onClick={handleClearAllPatched}
+                      className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground"
+                      title={`Clear all ${patchedCount} patched checkbox${patchedCount !== 1 ? "es" : ""}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              </TableHead>
               <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
