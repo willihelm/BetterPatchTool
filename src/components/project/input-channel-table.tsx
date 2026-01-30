@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Plus, MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Zap, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { InputChannel } from "@/types/convex";
 import { PortSelectCell } from "./port-select-cell";
 import { StereoPortSelectCell } from "./stereo-port-select-cell";
@@ -166,7 +167,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
     const colIndex = ALL_COLUMNS.indexOf(columnId);
     const isPortColumn = columnId === "port";
 
-    // Only handle navigation for port column - EditableCell handles its own keyboard events
+    // Handle navigation and special keys for non-port columns
     if (!isPortColumn) {
       // Handle Alt+Arrow for moving rows
       if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
@@ -190,6 +191,30 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
           const nextRowIndex = Math.min((channels?.length ?? 1) - 1, rowIndex + 1);
           setActiveCell({ rowIndex: nextRowIndex, columnId });
         }
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveCell({ rowIndex: Math.max(0, rowIndex - 1), columnId });
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveCell({ rowIndex: Math.min((channels?.length ?? 1) - 1, rowIndex + 1), columnId });
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setActiveCell({ rowIndex, columnId: ALL_COLUMNS[Math.max(0, colIndex - 1)] });
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setActiveCell({ rowIndex, columnId: ALL_COLUMNS[Math.min(ALL_COLUMNS.length - 1, colIndex + 1)] });
+      } else if (e.key === "Tab") {
+        e.preventDefault();
+        let nextColIndex = e.shiftKey ? colIndex - 1 : colIndex + 1;
+        let nextRowIndex = rowIndex;
+        if (nextColIndex < 0) {
+          nextColIndex = ALL_COLUMNS.length - 1;
+          nextRowIndex = Math.max(0, rowIndex - 1);
+        } else if (nextColIndex >= ALL_COLUMNS.length) {
+          nextColIndex = 0;
+          nextRowIndex = Math.min((channels?.length ?? 1) - 1, rowIndex + 1);
+        }
+        setActiveCell({ rowIndex: nextRowIndex, columnId: ALL_COLUMNS[nextColIndex] });
       } else if (e.key === "Escape") {
         e.preventDefault();
         setActiveCell(null);
@@ -284,14 +309,11 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
     });
   };
 
-  const handlePortSelectStereo = async (channelId: string, portId: string | null, side: "left" | "right") => {
-    const channel = channels?.find(c => c._id === channelId);
-    if (!channel) return;
-
+  const handlePortSelectStereo = async (channelId: string, leftPortId: string | null, rightPortId: string | null) => {
     await patchChannel({
       channelId: channelId as Id<"inputChannels">,
-      ioPortId: side === "left" ? (portId as Id<"ioPorts"> | null) : (channel.ioPortId as Id<"ioPorts"> | null),
-      ioPortIdRight: side === "right" ? (portId as Id<"ioPorts"> | null) : (channel.ioPortIdRight as Id<"ioPorts"> | null),
+      ioPortId: leftPortId as Id<"ioPorts"> | null,
+      ioPortIdRight: rightPortId as Id<"ioPorts"> | null,
     });
   };
 
@@ -425,7 +447,12 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
               channels.map((channel, rowIndex) => (
                 <TableRow
                   key={channel._id}
-                  className={`group ${activeCell?.rowIndex === rowIndex ? "bg-muted/30" : ""} ${selection.isSelected(channel._id) ? "bg-primary/5" : ""}`}
+                  className={cn(
+                    "group",
+                    activeCell?.rowIndex === rowIndex && "bg-muted/30",
+                    selection.isSelected(channel._id) && "bg-primary/5",
+                    channel.isStereo && "h-16"
+                  )}
                 >
                   <TableCell className="text-center">
                     <input
@@ -454,10 +481,15 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
                       portType="input"
                       currentChannelId={channel._id}
                       isActive={isCellActive(rowIndex, "port")}
-                      onSelectLeft={(portId) => handlePortSelectStereo(channel._id, portId, "left")}
-                      onSelectRight={(portId) => handlePortSelectStereo(channel._id, portId, "right")}
+                      onSelectPair={(left, right) => handlePortSelectStereo(channel._id, left, right)}
                       onCellClick={() => setActiveCell({ rowIndex, columnId: "port" })}
-                      onOpenChange={(open) => setPortDropdownOpen(open ? rowIndex : null)}
+                      onOpenChange={(open) => {
+                        setPortDropdownOpen(open ? rowIndex : null);
+                        if (!open) {
+                          // Use setTimeout to focus after Radix finishes returning focus to trigger
+                          setTimeout(() => containerRef.current?.focus(), 50);
+                        }
+                      }}
                     />
                   ) : (
                     <PortSelectCell
@@ -467,7 +499,13 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
                       isActive={isCellActive(rowIndex, "port")}
                       onSelect={(portId) => handlePortSelect(channel._id, portId)}
                       onCellClick={() => setActiveCell({ rowIndex, columnId: "port" })}
-                      onOpenChange={(open) => setPortDropdownOpen(open ? rowIndex : null)}
+                      onOpenChange={(open) => {
+                        setPortDropdownOpen(open ? rowIndex : null);
+                        if (!open) {
+                          // Use setTimeout to focus after Radix finishes returning focus to trigger
+                          setTimeout(() => containerRef.current?.focus(), 50);
+                        }
+                      }}
                     />
                   )}
 
@@ -583,12 +621,22 @@ const EditableCell = memo(function EditableCell({
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  // Track if editing was started by typing a character (vs F2/Enter/click)
+  const startedByTypingRef = useRef(false);
 
   // Focus input when editing starts
   useEffect(() => {
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
-      inputRef.current.select();
+      // Only select all if not started by typing (otherwise cursor goes to end)
+      if (!startedByTypingRef.current) {
+        inputRef.current.select();
+      } else {
+        // Place cursor at end when started by typing
+        const len = inputRef.current.value.length;
+        inputRef.current.setSelectionRange(len, len);
+      }
+      startedByTypingRef.current = false;
     }
   }, [isEditing]);
 
@@ -601,7 +649,8 @@ const EditableCell = memo(function EditableCell({
     }
   }, [isActive, isEditing, editValue, rowIndex, columnId, onSave]);
 
-  const startEditing = useCallback((initialValue?: string) => {
+  const startEditing = useCallback((initialValue?: string, byTyping?: boolean) => {
+    startedByTypingRef.current = byTyping ?? false;
     setEditValue(initialValue ?? value ?? "");
     setIsEditing(true);
   }, [value]);
@@ -670,7 +719,7 @@ const EditableCell = memo(function EditableCell({
           // Start editing on alphanumeric input
           if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
-            startEditing(e.key);
+            startEditing(e.key, true);
           }
           break;
       }

@@ -24,11 +24,8 @@ interface StereoPortSelectCellProps {
   portType: "input" | "output";
   currentChannelId: string;
   isActive: boolean;
-  activeSubCell?: "left" | "right"; // Which sub-cell is active
-  onSelectLeft: (portId: string | null) => void;
-  onSelectRight: (portId: string | null) => void;
+  onSelectPair: (leftPortId: string | null, rightPortId: string | null) => void;
   onCellClick: () => void;
-  onSubCellClick?: (side: "left" | "right") => void;
   onOpenChange?: (open: boolean) => void;
 }
 
@@ -38,15 +35,11 @@ export const StereoPortSelectCell = memo(function StereoPortSelectCell({
   portType,
   currentChannelId,
   isActive,
-  activeSubCell,
-  onSelectLeft,
-  onSelectRight,
+  onSelectPair,
   onCellClick,
-  onSubCellClick,
   onOpenChange,
 }: StereoPortSelectCellProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [currentSide, setCurrentSide] = useState<"left" | "right">("left");
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   // Get data from context
@@ -65,44 +58,48 @@ export const StereoPortSelectCell = memo(function StereoPortSelectCell({
     onOpenChange?.(open);
   };
 
-  // Open dropdown when cell becomes active
+  // Open dropdown when cell becomes active and user presses Enter/F2
   useEffect(() => {
     if (isActive && !isOpen) {
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === "Enter" || e.key === "F2") {
           e.preventDefault();
           setIsOpen(true);
-        } else if (e.key === "Tab") {
-          // Tab between left and right
-          e.preventDefault();
-          if (currentSide === "left") {
-            setCurrentSide("right");
-            onSubCellClick?.("right");
-          } else {
-            setCurrentSide("left");
-            onSubCellClick?.("left");
-          }
         }
       };
       window.addEventListener("keydown", handleKeyDown);
       return () => window.removeEventListener("keydown", handleKeyDown);
     }
-  }, [isActive, isOpen, currentSide, onSubCellClick]);
+  }, [isActive, isOpen]);
 
-  const handleSelectPort = (portId: string | null) => {
-    if (currentSide === "left") {
-      onSelectLeft(portId);
-      // After selecting left, move to right
-      setCurrentSide("right");
-      onSubCellClick?.("right");
-    } else {
-      onSelectRight(portId);
-      setIsOpen(false);
-    }
+  const handleSelectPair = (leftPortId: string | null, rightPortId: string | null) => {
+    onSelectPair(leftPortId, rightPortId);
+    setIsOpen(false);
+    // Blur the trigger after Radix finishes restoring focus, so arrow navigation works
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        triggerRef.current?.blur();
+      });
+    });
   };
 
-  const currentValue = currentSide === "left" ? valueLeft : valueRight;
-  const currentPortInfo = currentSide === "left" ? currentPortInfoLeft : currentPortInfoRight;
+  // Generate port pairs for each group (consecutive ports: 1+2, 2+3, 3+4, etc.)
+  const getPortPairs = (ports: typeof portGroups[0]["ports"]) => {
+    const pairs: Array<{
+      left: typeof ports[0];
+      right: typeof ports[0];
+      label: string;
+    }> = [];
+
+    for (let i = 0; i < ports.length - 1; i++) {
+      pairs.push({
+        left: ports[i],
+        right: ports[i + 1],
+        label: `${ports[i].label} + ${ports[i + 1].label}`,
+      });
+    }
+    return pairs;
+  };
 
   return (
     <TableCell
@@ -114,59 +111,71 @@ export const StereoPortSelectCell = memo(function StereoPortSelectCell({
       )}
       onClick={onCellClick}
     >
-      <div className="flex flex-col h-full px-2 py-1 gap-0.5">
-        {/* Left Port */}
-        <DropdownMenu open={isOpen && currentSide === "left"} onOpenChange={(open) => {
-          if (open) {
-            setCurrentSide("left");
-            handleOpenChange(true);
-          } else if (currentSide === "left") {
-            handleOpenChange(false);
-          }
-        }}>
-          <DropdownMenuTrigger asChild>
-            <button
-              ref={currentSide === "left" ? triggerRef : undefined}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setCurrentSide("left");
-                onSubCellClick?.("left");
-              }}
-              className={cn(
-                "flex items-center justify-between w-full px-1.5 py-0.5 rounded",
-                "bg-transparent outline-none focus:outline-none focus-visible:outline-none",
-                currentSide === "left" && isActive && "ring-1 ring-primary/50"
+      <DropdownMenu open={isOpen} onOpenChange={handleOpenChange} modal={false}>
+        <DropdownMenuTrigger asChild>
+          <button
+            ref={triggerRef}
+            type="button"
+            tabIndex={-1}
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+            onKeyDown={(e) => {
+              // Block arrow keys to prevent Radix from opening dropdown on ArrowDown
+              if (e.key.startsWith("Arrow")) {
+                e.preventDefault();
+              }
+            }}
+            className={cn(
+              "flex items-center justify-between h-full w-full px-2 py-1.5",
+              "bg-transparent outline-none focus:outline-none focus-visible:outline-none"
+            )}
+          >
+            <div className="flex flex-col gap-1">
+              {currentPortInfoLeft ? (
+                <Badge
+                  variant="outline"
+                  className="font-mono"
+                  style={{
+                    borderColor: currentPortInfoLeft.deviceColor,
+                    color: currentPortInfoLeft.deviceColor,
+                  }}
+                >
+                  {currentPortInfoLeft.label}
+                </Badge>
+              ) : (
+                <span className="text-muted-foreground">-</span>
               )}
-            >
-              <div className="flex items-center gap-1 flex-1">
-                <span className="text-[10px] text-muted-foreground font-medium w-3">L</span>
-                {currentPortInfoLeft ? (
-                  <Badge
-                    variant="outline"
-                    className="font-mono text-[10px] px-1 py-0"
-                    style={{
-                      borderColor: currentPortInfoLeft.deviceColor,
-                      color: currentPortInfoLeft.deviceColor,
-                    }}
-                  >
-                    {currentPortInfoLeft.label}
-                  </Badge>
-                ) : (
-                  <span className="text-muted-foreground text-[10px]">-</span>
-                )}
-              </div>
-              <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuItem onClick={() => handleSelectPort(null)}>
-              <span className="text-muted-foreground">None</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {portGroups
-              .filter((group) => group.ports.length > 0)
-              .map((group) => (
+              {currentPortInfoRight ? (
+                <Badge
+                  variant="outline"
+                  className="font-mono"
+                  style={{
+                    borderColor: currentPortInfoRight.deviceColor,
+                    color: currentPortInfoRight.deviceColor,
+                  }}
+                >
+                  {currentPortInfoRight.label}
+                </Badge>
+              ) : (
+                <span className="text-muted-foreground">-</span>
+              )}
+            </div>
+            <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuItem onClick={() => handleSelectPair(null, null)}>
+            <span className="text-muted-foreground">None</span>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {portGroups
+            .filter((group) => group.ports.length >= 2)
+            .map((group) => {
+              const pairs = getPortPairs(group.ports);
+              if (pairs.length === 0) return null;
+
+              return (
                 <DropdownMenuSub key={group.device._id}>
                   <DropdownMenuSubTrigger className="flex items-center gap-2">
                     <span
@@ -175,34 +184,35 @@ export const StereoPortSelectCell = memo(function StereoPortSelectCell({
                     />
                     <span className="truncate">{group.device.name}</span>
                     <span className="ml-auto text-xs text-muted-foreground">
-                      {group.ports.length}
+                      {pairs.length} pairs
                     </span>
                   </DropdownMenuSubTrigger>
                   <DropdownMenuPortal>
-                    <DropdownMenuSubContent className="max-h-64 overflow-y-auto min-w-40">
-                      {group.ports.map((port) => {
-                        const usage = portUsageMap[port._id];
-                        const isUsedByOther =
-                          usage && usage.channelId !== currentChannelId;
-                        const isCurrentPort = port._id === valueLeft;
+                    <DropdownMenuSubContent className="max-h-64 overflow-y-auto min-w-44">
+                      {pairs.map((pair) => {
+                        const leftUsage = portUsageMap[pair.left._id];
+                        const rightUsage = portUsageMap[pair.right._id];
+                        const isLeftUsedByOther = leftUsage && leftUsage.channelId !== currentChannelId;
+                        const isRightUsedByOther = rightUsage && rightUsage.channelId !== currentChannelId;
+                        const isUsedByOther = isLeftUsedByOther || isRightUsedByOther;
+                        const isCurrentPair = pair.left._id === valueLeft && pair.right._id === valueRight;
 
                         return (
                           <DropdownMenuItem
-                            key={port._id}
-                            onClick={() => handleSelectPort(port._id)}
+                            key={`${pair.left._id}-${pair.right._id}`}
+                            onClick={() => handleSelectPair(pair.left._id, pair.right._id)}
                             className={cn(
                               "flex items-center justify-between gap-4",
                               isUsedByOther && "opacity-60",
-                              isCurrentPort && "bg-accent"
+                              isCurrentPair && "bg-accent"
                             )}
                           >
-                            <span className="font-mono">{port.label}</span>
+                            <span className="font-mono">{pair.label}</span>
                             {isUsedByOther && (
-                              <span
-                                className="text-xs text-muted-foreground truncate max-w-20"
-                                title={usage.channelName}
-                              >
-                                {usage.channelName}
+                              <span className="text-xs text-muted-foreground truncate max-w-24">
+                                {isLeftUsedByOther && leftUsage.channelName}
+                                {isLeftUsedByOther && isRightUsedByOther && " / "}
+                                {isRightUsedByOther && rightUsage.channelName}
                               </span>
                             )}
                           </DropdownMenuItem>
@@ -211,110 +221,10 @@ export const StereoPortSelectCell = memo(function StereoPortSelectCell({
                     </DropdownMenuSubContent>
                   </DropdownMenuPortal>
                 </DropdownMenuSub>
-              ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Right Port */}
-        <DropdownMenu open={isOpen && currentSide === "right"} onOpenChange={(open) => {
-          if (open) {
-            setCurrentSide("right");
-            handleOpenChange(true);
-          } else if (currentSide === "right") {
-            handleOpenChange(false);
-          }
-        }}>
-          <DropdownMenuTrigger asChild>
-            <button
-              ref={currentSide === "right" ? triggerRef : undefined}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setCurrentSide("right");
-                onSubCellClick?.("right");
-              }}
-              className={cn(
-                "flex items-center justify-between w-full px-1.5 py-0.5 rounded",
-                "bg-transparent outline-none focus:outline-none focus-visible:outline-none",
-                currentSide === "right" && isActive && "ring-1 ring-primary/50"
-              )}
-            >
-              <div className="flex items-center gap-1 flex-1">
-                <span className="text-[10px] text-muted-foreground font-medium w-3">R</span>
-                {currentPortInfoRight ? (
-                  <Badge
-                    variant="outline"
-                    className="font-mono text-[10px] px-1 py-0"
-                    style={{
-                      borderColor: currentPortInfoRight.deviceColor,
-                      color: currentPortInfoRight.deviceColor,
-                    }}
-                  >
-                    {currentPortInfoRight.label}
-                  </Badge>
-                ) : (
-                  <span className="text-muted-foreground text-[10px]">-</span>
-                )}
-              </div>
-              <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuItem onClick={() => handleSelectPort(null)}>
-              <span className="text-muted-foreground">None</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {portGroups
-              .filter((group) => group.ports.length > 0)
-              .map((group) => (
-                <DropdownMenuSub key={group.device._id}>
-                  <DropdownMenuSubTrigger className="flex items-center gap-2">
-                    <span
-                      className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: group.device.color }}
-                    />
-                    <span className="truncate">{group.device.name}</span>
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {group.ports.length}
-                    </span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuPortal>
-                    <DropdownMenuSubContent className="max-h-64 overflow-y-auto min-w-40">
-                      {group.ports.map((port) => {
-                        const usage = portUsageMap[port._id];
-                        const isUsedByOther =
-                          usage && usage.channelId !== currentChannelId;
-                        const isCurrentPort = port._id === valueRight;
-
-                        return (
-                          <DropdownMenuItem
-                            key={port._id}
-                            onClick={() => handleSelectPort(port._id)}
-                            className={cn(
-                              "flex items-center justify-between gap-4",
-                              isUsedByOther && "opacity-60",
-                              isCurrentPort && "bg-accent"
-                            )}
-                          >
-                            <span className="font-mono">{port.label}</span>
-                            {isUsedByOther && (
-                              <span
-                                className="text-xs text-muted-foreground truncate max-w-20"
-                                title={usage.channelName}
-                              >
-                                {usage.channelName}
-                              </span>
-                            )}
-                          </DropdownMenuItem>
-                        );
-                      })}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuPortal>
-                </DropdownMenuSub>
-              ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+              );
+            })}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </TableCell>
   );
 });

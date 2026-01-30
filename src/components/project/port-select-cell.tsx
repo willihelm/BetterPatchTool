@@ -69,16 +69,15 @@ export const PortSelectCell = memo(function PortSelectCell({
     }
   }, [isActive, isOpen]);
 
-  // Focus trigger when active
-  useEffect(() => {
-    if (isActive && !isOpen && triggerRef.current) {
-      triggerRef.current.focus();
-    }
-  }, [isActive, isOpen]);
-
   const handleSelectPort = (portId: string | null) => {
     onSelect(portId);
     setIsOpen(false);
+    // Blur the trigger after Radix finishes restoring focus, so arrow navigation works
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        triggerRef.current?.blur();
+      });
+    });
   };
 
   return (
@@ -91,13 +90,20 @@ export const PortSelectCell = memo(function PortSelectCell({
       )}
       onClick={onCellClick}
     >
-      <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
+      <DropdownMenu open={isOpen} onOpenChange={handleOpenChange} modal={false}>
         <DropdownMenuTrigger asChild>
           <button
             ref={triggerRef}
             type="button"
+            tabIndex={-1}
             onClick={(e) => {
               e.stopPropagation();
+            }}
+            onKeyDown={(e) => {
+              // Block arrow keys to prevent Radix from opening dropdown on ArrowDown
+              if (e.key.startsWith("Arrow")) {
+                e.preventDefault();
+              }
             }}
             className={cn(
               "flex items-center justify-between h-full w-full px-2 py-1.5",

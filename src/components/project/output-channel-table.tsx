@@ -373,14 +373,11 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
     });
   };
 
-  const handlePortSelectStereo = async (channelId: string, portId: string | null, side: "left" | "right") => {
-    const channel = channels?.find(c => c._id === channelId);
-    if (!channel) return;
-
+  const handlePortSelectStereo = async (channelId: string, leftPortId: string | null, rightPortId: string | null) => {
     await patchChannel({
       channelId: channelId as Id<"outputChannels">,
-      ioPortId: side === "left" ? (portId as Id<"ioPorts"> | null) : (channel.ioPortId as Id<"ioPorts"> | null),
-      ioPortIdRight: side === "right" ? (portId as Id<"ioPorts"> | null) : (channel.ioPortIdRight as Id<"ioPorts"> | null),
+      ioPortId: leftPortId as Id<"ioPorts"> | null,
+      ioPortIdRight: rightPortId as Id<"ioPorts"> | null,
     });
   };
 
@@ -489,7 +486,12 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
               channels.map((channel, rowIndex) => (
                 <TableRow
                   key={channel._id}
-                  className={`group ${activeCell?.rowIndex === rowIndex ? "bg-muted/30" : ""} ${selection.isSelected(channel._id) ? "bg-primary/5" : ""}`}
+                  className={cn(
+                    "group",
+                    activeCell?.rowIndex === rowIndex && "bg-muted/30",
+                    selection.isSelected(channel._id) && "bg-primary/5",
+                    channel.isStereo && "h-16"
+                  )}
                 >
                   <TableCell className="text-center">
                     <input
@@ -518,10 +520,15 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
                       portType="output"
                       currentChannelId={channel._id}
                       isActive={isCellActive(rowIndex, "port")}
-                      onSelectLeft={(portId) => handlePortSelectStereo(channel._id, portId, "left")}
-                      onSelectRight={(portId) => handlePortSelectStereo(channel._id, portId, "right")}
+                      onSelectPair={(left, right) => handlePortSelectStereo(channel._id, left, right)}
                       onCellClick={() => selectCell({ rowIndex, columnId: "port" })}
-                      onOpenChange={(open) => setPortDropdownOpen(open ? rowIndex : null)}
+                      onOpenChange={(open) => {
+                        setPortDropdownOpen(open ? rowIndex : null);
+                        if (!open) {
+                          // Use setTimeout to focus after Radix finishes returning focus to trigger
+                          setTimeout(() => containerRef.current?.focus(), 50);
+                        }
+                      }}
                     />
                   ) : (
                     <PortSelectCell
@@ -531,7 +538,13 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
                       isActive={isCellActive(rowIndex, "port")}
                       onSelect={(portId) => handlePortSelect(channel._id, portId)}
                       onCellClick={() => selectCell({ rowIndex, columnId: "port" })}
-                      onOpenChange={(open) => setPortDropdownOpen(open ? rowIndex : null)}
+                      onOpenChange={(open) => {
+                        setPortDropdownOpen(open ? rowIndex : null);
+                        if (!open) {
+                          // Use setTimeout to focus after Radix finishes returning focus to trigger
+                          setTimeout(() => containerRef.current?.focus(), 50);
+                        }
+                      }}
                     />
                   )}
 
