@@ -13,9 +13,8 @@ test.describe("Project Workflow", () => {
     const title = `Test Project ${Date.now()}`;
     await createProject(page, title);
 
-    // Check that all tabs are present
-    await expect(page.getByRole("tab", { name: "Input Patch List" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Output Patch List" })).toBeVisible();
+    // Check that all main tabs are present
+    await expect(page.getByRole("tab", { name: "Patch List" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Patch Matrix" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Stageboxes" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "IO Devices" })).toBeVisible();
@@ -25,9 +24,15 @@ test.describe("Project Workflow", () => {
     const title = `Test Project ${Date.now()}`;
     await createProject(page, title);
 
-    // Switch to Output Patch List tab
-    await page.getByRole("tab", { name: "Output Patch List" }).click();
-    await expect(page.getByRole("tab", { name: "Output Patch List" })).toHaveAttribute(
+    // Should start on Patch List tab (default)
+    await expect(page.getByRole("tab", { name: "Patch List" })).toHaveAttribute(
+      "data-state",
+      "active"
+    );
+
+    // Switch to Patch Matrix tab
+    await page.getByRole("tab", { name: "Patch Matrix" }).click();
+    await expect(page.getByRole("tab", { name: "Patch Matrix" })).toHaveAttribute(
       "data-state",
       "active"
     );

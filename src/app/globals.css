@@ -1,3 +1,5 @@
+@import 'react-data-grid/lib/styles.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -55,5 +57,81 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* react-data-grid custom styles */
+@layer components {
+  .rdg {
+    --rdg-background-color: hsl(var(--background));
+    --rdg-header-background-color: hsl(var(--muted) / 0.5);
+    --rdg-header-row-height: 40px;
+    --rdg-row-height: 40px;
+    --rdg-row-hover-background-color: hsl(var(--muted) / 0.5);
+    --rdg-selection-color: hsl(var(--primary));
+    --rdg-border-color: hsl(var(--border));
+    --rdg-font-size: 14px;
+    block-size: auto;
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .rdg-cell {
+    padding: 0 8px;
+    border-right: none;
+    border-bottom: 1px solid var(--rdg-border-color);
+  }
+
+  .rdg-header-row .rdg-cell {
+    font-weight: 500;
+    font-size: 13px;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .rdg-cell[aria-selected="true"] {
+    box-shadow: inset 0 0 0 2px hsl(var(--primary));
+    background-color: hsl(var(--primary) / 0.05);
+  }
+
+  .rdg-row:hover {
+    background-color: var(--rdg-row-hover-background-color);
+  }
+
+  .rdg-row.selected {
+    background-color: hsl(var(--primary) / 0.05);
+  }
+
+  /* Stereo row height */
+  .rdg-row.stereo-row {
+    --rdg-row-height: 64px;
+  }
+
+  /* Remove focus outline, we use box-shadow instead */
+  .rdg-cell:focus {
+    outline: none;
+  }
+
+  /* Text editor styling */
+  .rdg-text-editor {
+    appearance: none;
+    box-sizing: border-box;
+    inline-size: 100%;
+    block-size: 100%;
+    padding: 0 6px;
+    border: none;
+    font-family: inherit;
+    font-size: inherit;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
+  .rdg-text-editor:focus {
+    outline: none;
+  }
+
+  /* Dark mode adjustments */
+  .dark .rdg {
+    --rdg-background-color: hsl(var(--background));
+    --rdg-header-background-color: hsl(var(--muted) / 0.5);
   }
 }

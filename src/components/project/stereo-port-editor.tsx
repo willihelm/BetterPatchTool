@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, memo } from "react";
+import { useState, useRef, useEffect } from "react";
+import type { RenderEditCellProps } from "react-data-grid";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -13,74 +14,54 @@ import {
   DropdownMenuPortal,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { TableCell } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { usePortData } from "./port-data-context";
 import { ChevronDown } from "lucide-react";
 
-interface StereoPortSelectCellProps {
-  valueLeft: string | undefined;
-  valueRight: string | undefined;
-  portType: "input" | "output";
-  currentChannelId: string;
-  isActive: boolean;
-  onSelectPair: (leftPortId: string | null, rightPortId: string | null) => void;
-  onCellClick: () => void;
-  onOpenChange?: (open: boolean) => void;
+interface StereoPortEditorRow {
+  _id: string;
+  ioPortId?: string;
+  ioPortIdRight?: string;
 }
 
-export const StereoPortSelectCell = memo(function StereoPortSelectCell({
-  valueLeft,
-  valueRight,
+interface StereoPortEditorProps<TRow extends StereoPortEditorRow> extends RenderEditCellProps<TRow> {
+  portType: "input" | "output";
+}
+
+export function StereoPortEditor<TRow extends StereoPortEditorRow>({
+  row,
+  onRowChange,
+  onClose,
   portType,
-  currentChannelId,
-  isActive,
-  onSelectPair,
-  onCellClick,
-  onOpenChange,
-}: StereoPortSelectCellProps) {
-  const [isOpen, setIsOpen] = useState(false);
+}: StereoPortEditorProps<TRow>) {
+  const [isOpen, setIsOpen] = useState(true);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // Get data from context
   const { portInfoMap, portUsageMap, inputPortGroups, outputPortGroups } = usePortData();
-
-  // Get the port groups based on type
   const portGroups = portType === "input" ? inputPortGroups : outputPortGroups;
 
-  // Get current port info for display
-  const currentPortInfoLeft = valueLeft ? portInfoMap[valueLeft] : null;
-  const currentPortInfoRight = valueRight ? portInfoMap[valueRight] : null;
+  const currentPortInfoLeft = row.ioPortId ? portInfoMap[row.ioPortId] : null;
+  const currentPortInfoRight = row.ioPortIdRight ? portInfoMap[row.ioPortIdRight] : null;
 
-  // Handle open state changes
+  // Auto-focus trigger when editor opens
+  useEffect(() => {
+    triggerRef.current?.focus();
+  }, []);
+
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
-    onOpenChange?.(open);
+    if (!open) {
+      onClose(false, true);
+    }
   };
 
-  // Open dropdown when cell becomes active and user presses Enter/F2
-  useEffect(() => {
-    if (isActive && !isOpen) {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Enter" || e.key === "F2") {
-          e.preventDefault();
-          setIsOpen(true);
-        }
-      };
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [isActive, isOpen]);
-
   const handleSelectPair = (leftPortId: string | null, rightPortId: string | null) => {
-    onSelectPair(leftPortId, rightPortId);
+    onRowChange({
+      ...row,
+      ioPortId: leftPortId ?? undefined,
+      ioPortIdRight: rightPortId ?? undefined,
+    } as TRow, true);
     setIsOpen(false);
-    // Blur the trigger after Radix finishes restoring focus, so arrow navigation works
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        triggerRef.current?.blur();
-      });
-    });
   };
 
   // Generate port pairs for each group (consecutive ports: 1+2, 2+3, 3+4, etc.)
@@ -102,30 +83,12 @@ export const StereoPortSelectCell = memo(function StereoPortSelectCell({
   };
 
   return (
-    <TableCell
-      className={cn(
-        "cursor-pointer transition-colors p-0",
-        isActive
-          ? "ring-2 ring-primary ring-inset bg-primary/5"
-          : "hover:bg-muted/50"
-      )}
-      onClick={onCellClick}
-    >
+    <div className="h-full w-full flex items-center">
       <DropdownMenu open={isOpen} onOpenChange={handleOpenChange} modal={false}>
         <DropdownMenuTrigger asChild>
           <button
             ref={triggerRef}
             type="button"
-            tabIndex={-1}
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-            onKeyDown={(e) => {
-              // Block arrow keys to prevent Radix from opening dropdown on ArrowDown
-              if (e.key.startsWith("Arrow")) {
-                e.preventDefault();
-              }
-            }}
             className={cn(
               "flex items-center justify-between h-full w-full px-2 py-1.5",
               "bg-transparent outline-none focus:outline-none focus-visible:outline-none"
@@ -192,10 +155,10 @@ export const StereoPortSelectCell = memo(function StereoPortSelectCell({
                       {pairs.map((pair) => {
                         const leftUsage = portUsageMap[pair.left._id];
                         const rightUsage = portUsageMap[pair.right._id];
-                        const isLeftUsedByOther = leftUsage && leftUsage.channelId !== currentChannelId;
-                        const isRightUsedByOther = rightUsage && rightUsage.channelId !== currentChannelId;
+                        const isLeftUsedByOther = leftUsage && leftUsage.channelId !== row._id;
+                        const isRightUsedByOther = rightUsage && rightUsage.channelId !== row._id;
                         const isUsedByOther = isLeftUsedByOther || isRightUsedByOther;
-                        const isCurrentPair = pair.left._id === valueLeft && pair.right._id === valueRight;
+                        const isCurrentPair = pair.left._id === row.ioPortId && pair.right._id === row.ioPortIdRight;
 
                         return (
                           <DropdownMenuItem
@@ -225,6 +188,6 @@ export const StereoPortSelectCell = memo(function StereoPortSelectCell({
             })}
         </DropdownMenuContent>
       </DropdownMenu>
-    </TableCell>
+    </div>
   );
-});
+}

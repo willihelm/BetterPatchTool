@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, memo } from "react";
+import { useState, useRef, useEffect } from "react";
+import type { RenderEditCellProps } from "react-data-grid";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -13,98 +14,56 @@ import {
   DropdownMenuPortal,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { TableCell } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { usePortData } from "./port-data-context";
 import { ChevronDown } from "lucide-react";
 
-interface PortSelectCellProps {
-  value: string | undefined;
-  portType: "input" | "output";
-  currentChannelId: string;
-  isActive: boolean;
-  onSelect: (portId: string | null) => void;
-  onCellClick: () => void;
-  onOpenChange?: (open: boolean) => void;
+interface PortEditorRow {
+  _id: string;
+  ioPortId?: string;
 }
 
-export const PortSelectCell = memo(function PortSelectCell({
-  value,
+interface PortEditorProps<TRow extends PortEditorRow> extends RenderEditCellProps<TRow> {
+  portType: "input" | "output";
+}
+
+export function PortEditor<TRow extends PortEditorRow>({
+  row,
+  onRowChange,
+  onClose,
   portType,
-  currentChannelId,
-  isActive,
-  onSelect,
-  onCellClick,
-  onOpenChange,
-}: PortSelectCellProps) {
-  const [isOpen, setIsOpen] = useState(false);
+}: PortEditorProps<TRow>) {
+  const [isOpen, setIsOpen] = useState(true);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // Get data from context - only loaded once for the entire project
   const { portInfoMap, portUsageMap, inputPortGroups, outputPortGroups } = usePortData();
-
-  // Get the port groups based on type
   const portGroups = portType === "input" ? inputPortGroups : outputPortGroups;
+  const currentPortInfo = row.ioPortId ? portInfoMap[row.ioPortId] : null;
 
-  // Get current port info for display (lightweight lookup)
-  const currentPortInfo = value ? portInfoMap[value] : null;
+  // Auto-focus trigger when editor opens
+  useEffect(() => {
+    triggerRef.current?.focus();
+  }, []);
 
-  // Handle open state changes
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
-    onOpenChange?.(open);
+    if (!open) {
+      onClose(false, true);
+    }
   };
 
-  // Open dropdown when cell becomes active and user presses Enter
-  useEffect(() => {
-    if (isActive && !isOpen) {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Enter" || e.key === "F2") {
-          e.preventDefault();
-          setIsOpen(true);
-        }
-      };
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [isActive, isOpen]);
-
   const handleSelectPort = (portId: string | null) => {
-    onSelect(portId);
+    onRowChange({ ...row, ioPortId: portId ?? undefined } as TRow, true);
     setIsOpen(false);
-    // Blur the trigger after Radix finishes restoring focus, so arrow navigation works
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        triggerRef.current?.blur();
-      });
-    });
   };
 
   return (
-    <TableCell
-      className={cn(
-        "cursor-pointer transition-colors p-0",
-        isActive
-          ? "ring-2 ring-primary ring-inset bg-primary/5"
-          : "hover:bg-muted/50"
-      )}
-      onClick={onCellClick}
-    >
+    <div className="h-full w-full flex items-center">
       <DropdownMenu open={isOpen} onOpenChange={handleOpenChange} modal={false}>
         <DropdownMenuTrigger asChild>
           <button
             ref={triggerRef}
             type="button"
-            tabIndex={-1}
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-            onKeyDown={(e) => {
-              // Block arrow keys to prevent Radix from opening dropdown on ArrowDown
-              if (e.key.startsWith("Arrow")) {
-                e.preventDefault();
-              }
-            }}
             className={cn(
               "flex items-center justify-between h-full w-full px-2 py-1.5",
               "bg-transparent outline-none focus:outline-none focus-visible:outline-none"
@@ -150,9 +109,8 @@ export const PortSelectCell = memo(function PortSelectCell({
                   <DropdownMenuSubContent className="max-h-64 overflow-y-auto min-w-40">
                     {group.ports.map((port) => {
                       const usage = portUsageMap[port._id];
-                      const isUsedByOther =
-                        usage && usage.channelId !== currentChannelId;
-                      const isCurrentPort = port._id === value;
+                      const isUsedByOther = usage && usage.channelId !== row._id;
+                      const isCurrentPort = port._id === row.ioPortId;
 
                       return (
                         <DropdownMenuItem
@@ -182,6 +140,6 @@ export const PortSelectCell = memo(function PortSelectCell({
             ))}
         </DropdownMenuContent>
       </DropdownMenu>
-    </TableCell>
+    </div>
   );
-});
+}
