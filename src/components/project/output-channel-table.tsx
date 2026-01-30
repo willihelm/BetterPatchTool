@@ -88,28 +88,54 @@ function PortCellDropdown({ row, onSelect }: PortCellDropdownProps) {
     dropdownContext?.refocusGrid();
   };
 
-  // Prevent arrow keys on trigger from opening dropdown - let grid handle navigation
+  // Prevent arrow keys on trigger from opening dropdown - navigate by clicking target cell
   const handleTriggerKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
       e.stopPropagation();
-      // Focus grid and dispatch a new key event so grid can handle navigation
+
+      // Find current cell position in the grid
+      const trigger = e.currentTarget as HTMLElement;
+      const currentCell = trigger.closest('[role="gridcell"]');
+      if (!currentCell) return;
+
+      const currentRow = currentCell.closest('[role="row"]');
+      if (!currentRow) return;
+
       const key = e.key;
-      const keyCode = e.key === "ArrowDown" ? 40 : e.key === "ArrowUp" ? 38 : e.key === "ArrowLeft" ? 37 : 39;
+      const cellIndex = Array.from(currentRow.children).indexOf(currentCell);
+      const grid = currentRow.closest('[role="grid"]');
+      if (!grid) return;
+
+      const allRows = Array.from(grid.querySelectorAll('[role="row"]'));
+      const currentRowIndex = allRows.indexOf(currentRow as Element);
+
       requestAnimationFrame(() => {
-        const grid = document.querySelector<HTMLDivElement>('[role="grid"]');
-        if (grid) {
-          grid.focus();
-          // Dispatch a complete keyboard event that react-data-grid can process
-          const event = new KeyboardEvent('keydown', {
-            key,
-            code: key,
-            keyCode,
-            which: keyCode,
-            bubbles: true,
-            cancelable: true,
-          });
-          grid.dispatchEvent(event);
+        let targetRowIndex = currentRowIndex;
+        let targetCellIndex = cellIndex;
+
+        if (key === "ArrowDown") {
+          targetRowIndex = currentRowIndex + 1;
+        } else if (key === "ArrowUp") {
+          targetRowIndex = currentRowIndex - 1;
+        } else if (key === "ArrowLeft") {
+          targetCellIndex = cellIndex - 1;
+        } else if (key === "ArrowRight") {
+          targetCellIndex = cellIndex + 1;
+        }
+
+        // Re-query the grid in case DOM changed
+        const gridEl = document.querySelector('[role="grid"]');
+        if (!gridEl) return;
+
+        const rows = gridEl.querySelectorAll('[role="row"]');
+        const targetRow = rows[targetRowIndex];
+
+        if (targetRow && targetCellIndex >= 0 && targetCellIndex < targetRow.children.length) {
+          const targetCell = targetRow.children[targetCellIndex] as HTMLElement;
+          if (targetCell?.getAttribute('role') === 'gridcell') {
+            targetCell.click();
+          }
         }
       });
     }
