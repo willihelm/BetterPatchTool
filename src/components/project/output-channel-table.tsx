@@ -50,6 +50,13 @@ interface PortDropdownContextValue {
 }
 const PortDropdownContext = createContext<PortDropdownContextValue | null>(null);
 
+// Time window to block dropdown reopening after selection (ms)
+const SELECTION_BLOCK_WINDOW = 500;
+
+// Module-level variable to track last selection time
+// This persists across all component remounts and re-renders
+let lastPortSelectionTimestamp = 0;
+
 // Port cell with inline dropdown - opens on click, Enter, or Space (not on focus)
 interface PortCellDropdownProps {
   row: ChannelRow;
@@ -59,7 +66,20 @@ interface PortCellDropdownProps {
 function PortCellDropdown({ row, onSelect }: PortCellDropdownProps) {
   const dropdownContext = useContext(PortDropdownContext);
   const isOpen = dropdownContext?.openRowId === row._id;
-  const onOpenChange = (open: boolean) => dropdownContext?.setOpenRowId(open ? row._id : null);
+
+  // Check if we're within the block window after a selection
+  // Uses module-level variable to ensure it persists across all remounts
+  const isWithinBlockWindow = () => {
+    return Date.now() - lastPortSelectionTimestamp < SELECTION_BLOCK_WINDOW;
+  };
+
+  const onOpenChange = (open: boolean) => {
+    // Prevent reopening immediately after a selection (handles Space keyup triggering button)
+    if (open && isWithinBlockWindow()) {
+      return;
+    }
+    dropdownContext?.setOpenRowId(open ? row._id : null);
+  };
   const { portInfoMap, portUsageMap, outputPortGroups } = usePortData();
   const portInfo = row.ioPortId ? portInfoMap[row.ioPortId] : null;
   const portInfoRight = row.ioPortIdRight ? portInfoMap[row.ioPortIdRight] : null;
@@ -83,6 +103,9 @@ function PortCellDropdown({ row, onSelect }: PortCellDropdownProps) {
 
   const handleSelect = (portId: string | null, portIdRight?: string | null) => {
     onSelect(portId, portIdRight);
+    // Set timestamp to prevent immediate reopen from Space keyup
+    // Uses module-level variable to ensure it persists across all remounts
+    lastPortSelectionTimestamp = Date.now();
     onOpenChange(false);
     // Refocus grid to restore arrow key navigation
     dropdownContext?.refocusGrid();
@@ -90,6 +113,12 @@ function PortCellDropdown({ row, onSelect }: PortCellDropdownProps) {
 
   // Prevent arrow keys on trigger from opening dropdown - navigate by clicking target cell
   const handleTriggerKeyDown = (e: React.KeyboardEvent) => {
+    // Block Space/Enter keydown if we just selected (prevents Radix from activating)
+    if (isWithinBlockWindow() && (e.key === " " || e.key === "Enter")) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
       e.stopPropagation();
@@ -141,6 +170,14 @@ function PortCellDropdown({ row, onSelect }: PortCellDropdownProps) {
     }
   };
 
+  // Block Space/Enter keyup after selection to prevent dropdown reopening
+  const handleTriggerKeyUp = (e: React.KeyboardEvent) => {
+    if (isWithinBlockWindow() && (e.key === " " || e.key === "Enter")) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
   if (row.isStereo) {
     return (
       <DropdownMenu open={isOpen} onOpenChange={onOpenChange}>
@@ -149,6 +186,7 @@ function PortCellDropdown({ row, onSelect }: PortCellDropdownProps) {
             type="button"
             className="flex items-center justify-between h-full w-full px-2 cursor-pointer hover:bg-muted/50 rounded focus:outline-none"
             onKeyDown={handleTriggerKeyDown}
+            onKeyUp={handleTriggerKeyUp}
           >
             <div className="flex flex-col gap-1 py-1 min-h-[48px] justify-center">
               {portInfo ? (
@@ -245,6 +283,7 @@ function PortCellDropdown({ row, onSelect }: PortCellDropdownProps) {
           type="button"
           className="flex items-center justify-between h-full w-full px-2 cursor-pointer hover:bg-muted/50 rounded focus:outline-none"
           onKeyDown={handleTriggerKeyDown}
+          onKeyUp={handleTriggerKeyUp}
         >
           <div className="min-h-[24px] flex items-center">
             {portInfo ? (
@@ -588,9 +627,14 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
     if (mode !== "SELECT") return;
 
     // Enter or Space on port column: Open dropdown
+    // But block if we just made a selection (prevents key repeat from reopening)
     if ((event.key === "Enter" || event.key === " ") && column.key === "port") {
       event.preventDefault();
       event.stopPropagation();
+      // Check if we're within the block window after a recent selection
+      if (Date.now() - lastPortSelectionTimestamp < SELECTION_BLOCK_WINDOW) {
+        return;
+      }
       setOpenPortDropdownRowId(row._id);
       return;
     }
