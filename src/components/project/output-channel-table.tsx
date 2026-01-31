@@ -664,15 +664,28 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
           const valueStr = typeof aboveValue === "string" ? aboveValue : "";
           const newValue = incrementTrailingNumber(valueStr);
           const nextRowIdx = Math.min(rowIdx + 1, rows.length - 1);
+          const colIdx = column.idx;
+
           updateChannel({
             channelId: row._id as Id<"outputChannels">,
             [column.key]: newValue || undefined,
           }).then(() => {
-            // Move selection to next row and refocus
-            setSelectedCell({ rowIdx: nextRowIdx, idx: column.idx });
-            requestAnimationFrame(() => {
-              gridRef.current?.querySelector<HTMLDivElement>('[role="grid"]')?.focus();
-            });
+            // After mutation completes, click on the target cell to establish proper focus
+            // This simulates user clicking which properly restores keyboard navigation
+            setTimeout(() => {
+              const grid = gridRef.current?.querySelector('[role="grid"]');
+              if (grid) {
+                // Find the target row (accounting for header row at index 0)
+                const rows = grid.querySelectorAll('[role="row"]');
+                const targetRow = rows[nextRowIdx + 1]; // +1 for header row
+                if (targetRow) {
+                  const targetCell = targetRow.children[colIdx] as HTMLElement;
+                  if (targetCell?.getAttribute('role') === 'gridcell') {
+                    targetCell.click();
+                  }
+                }
+              }
+            }, 50);
           });
         }
       }
