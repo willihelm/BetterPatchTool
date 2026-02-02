@@ -42,6 +42,8 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   const [showGlobalClearDialog, setShowGlobalClearDialog] = useState(false);
   const [deviceToClear, setDeviceToClear] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const deviceLabelRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const deviceHeaderRefs = useRef<Map<string, HTMLTableCellElement>>(new Map());
 
   // Queries
   const inputChannels = useQuery(api.inputChannels.list, { projectId });
@@ -509,6 +511,44 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
     return spans;
   }, [visiblePorts]);
 
+  // Handle sticky device labels on horizontal scroll
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const STICKY_LEFT = 180; // Width of the row label column
+
+    const handleScroll = () => {
+      const scrollLeft = container.scrollLeft;
+
+      deviceHeaderRefs.current.forEach((th, deviceId) => {
+        const labelDiv = deviceLabelRefs.current.get(deviceId);
+        if (!th || !labelDiv) return;
+
+        // Get the th's left position in the scrollable content
+        const thLeft = th.offsetLeft;
+        const thWidth = th.offsetWidth;
+
+        // Calculate how much the label needs to offset to stay at STICKY_LEFT
+        const stickyPoint = scrollLeft + STICKY_LEFT;
+
+        if (stickyPoint > thLeft && stickyPoint < thLeft + thWidth - 100) {
+          // The label should stick
+          const offset = stickyPoint - thLeft;
+          labelDiv.style.transform = `translateX(${offset}px)`;
+        } else {
+          // Reset to normal position
+          labelDiv.style.transform = 'translateX(0)';
+        }
+      });
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll(); // Initial calculation
+
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [deviceSpans]);
+
   // Device selection helper functions
   const toggleDevice = useCallback((deviceId: string) => {
     setSelectedDeviceIds((prev) => {
@@ -723,12 +763,22 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                   <th
                     key={span.deviceId}
                     colSpan={span.portCount}
-                    className="border-b border-l-2 p-0 bg-muted"
+                    className="border-b border-l-2 p-0 bg-muted overflow-visible"
+                    ref={(el) => {
+                      if (el) deviceHeaderRefs.current.set(span.deviceId, el);
+                      else deviceHeaderRefs.current.delete(span.deviceId);
+                    }}
                   >
-                    <div className="flex flex-col gap-1">
-                      {/* Device name */}
-                      <div className="flex items-center gap-2 px-2 pt-2">
-                        <span className="text-sm font-semibold whitespace-nowrap">{span.device.name}</span>
+                    <div className="flex flex-col gap-1 overflow-visible">
+                      {/* Device name - transforms applied via JS for sticky behavior */}
+                      <div
+                        ref={(el) => {
+                          if (el) deviceLabelRefs.current.set(span.deviceId, el);
+                          else deviceLabelRefs.current.delete(span.deviceId);
+                        }}
+                        className="flex items-center gap-2 px-2 pt-2 w-fit"
+                      >
+                        <span className="text-sm font-semibold whitespace-nowrap bg-muted pr-2">{span.device.name}</span>
                         {clearInfo.count > 0 && (
                           <Button
                             variant="ghost"
