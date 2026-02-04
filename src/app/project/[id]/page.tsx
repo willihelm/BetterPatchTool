@@ -18,12 +18,14 @@ import { PatchMatrix } from "@/components/project/patch-matrix";
 import { StageboxOverview } from "@/components/project/stagebox-overview";
 import { PortDataProvider } from "@/components/project/port-data-context";
 import { PDFExportDialog } from "@/components/project/pdf-export-dialog";
+import { SnapshotPanel } from "@/components/project/snapshot-panel";
 import type { Project, Mixer } from "@/types/convex";
 
 export default function ProjectPage() {
   const params = useParams();
   const projectId = params.id as Id<"projects">;
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
 
   const project = useQuery(api.projects.get, { projectId }) as Project | null | undefined;
   const mixers = useQuery(api.mixers.list, { projectId }) as Mixer[] | undefined;
@@ -86,7 +88,14 @@ export default function ProjectPage() {
                     {currentMixer.name} ({currentMixer.channelCount}ch)
                   </Badge>
                 )}
-                <ThemeSwitcher />
+                <SnapshotPanel
+                projectId={projectId}
+                ownerId={project.ownerId}
+                onRestored={(name) =>
+                  setRestoreMessage(`Projekt auf Savepoint "${name}" zurückgesetzt.`)
+                }
+              />
+              <ThemeSwitcher />
                 <Button variant="ghost" size="icon">
                   <Users className="h-4 w-4" />
                 </Button>
@@ -108,6 +117,11 @@ export default function ProjectPage() {
 
         {/* Main Content */}
         <main className="flex-1 container mx-auto px-4 py-4">
+        {restoreMessage && (
+          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            {restoreMessage}
+          </div>
+        )}
           <Tabs defaultValue="patch-list" className="h-full">
             <TabsList className="mb-4">
               <TabsTrigger value="patch-list">Patch List</TabsTrigger>

@@ -147,4 +147,20 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_public", ["isPublic"]),
+
+  // Project Snapshots
+  projectSnapshots: defineTable({
+    projectId: v.id("projects"),
+    createdBy: v.string(),
+    createdAt: v.number(),
+    name: v.string(),
+    note: v.optional(v.string()),
+    dataVersion: v.number(),
+  }).index("by_project", ["projectId"]),
+
+  projectSnapshotData: defineTable({
+    snapshotId: v.id("projectSnapshots"),
+    blob: v.string(),
+    compression: v.optional(v.literal("none")),
+  }).index("by_snapshot", ["snapshotId"]),
 });

@@ -40,6 +40,15 @@ export interface IODevice {
   portsPerRow?: number;
 }
 
+export interface Group {
+  _id: string;
+  _creationTime: number;
+  projectId: string;
+  name: string;
+  color?: string;
+  order: number;
+}
+
 export interface IOPort {
   _id: string;
   _creationTime: number;
@@ -92,4 +101,37 @@ export interface OutputChannel {
   location?: string;
   cable?: string;
   notes?: string;
+}
+
+export interface ProjectSnapshot {
+  _id: string;
+  _creationTime: number;
+  projectId: string;
+  createdBy: string;
+  createdAt: number;
+  name: string;
+  note?: string;
+  dataVersion: number;
+}
+
+export interface ProjectSnapshotData {
+  _id: string;
+  _creationTime: number;
+  snapshotId: string;
+  blob: string;
+  compression?: "none";
+}
+
+export interface ProjectSnapshotPayload {
+  project: {
+    title: string;
+    date?: string;
+    venue?: string;
+  };
+  mixers: Mixer[];
+  ioDevices: IODevice[];
+  ioPorts: IOPort[];
+  groups: Group[];
+  inputChannels: InputChannel[];
+  outputChannels: OutputChannel[];
 }
