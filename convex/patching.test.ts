@@ -627,8 +627,8 @@ describe("patching", () => {
       });
 
       expect(data.portUsageMap[setup.inputPorts[0]._id]).toBeDefined();
-      expect(data.portUsageMap[setup.inputPorts[0]._id].channelType).toBe("input");
-      expect(data.portUsageMap[setup.inputPorts[0]._id].channelName).toBe("Kick");
+      expect(data.portUsageMap[setup.inputPorts[0]._id][0].channelType).toBe("input");
+      expect(data.portUsageMap[setup.inputPorts[0]._id][0].channelName).toBe("Kick");
     });
 
     it("should mark used ports in port groups", async () => {
@@ -704,8 +704,8 @@ describe("patching", () => {
       });
 
       expect(usageMap[setup.inputPorts[0]._id]).toBeDefined();
-      expect(usageMap[setup.inputPorts[0]._id].channelType).toBe("input");
-      expect(usageMap[setup.inputPorts[0]._id].channelId).toBe(setup.inputChannelIds[0]);
+      expect(usageMap[setup.inputPorts[0]._id][0].channelType).toBe("input");
+      expect(usageMap[setup.inputPorts[0]._id][0].channelId).toBe(setup.inputChannelIds[0]);
     });
 
     it("should handle stereo assignments (both ports)", async () => {
@@ -723,8 +723,8 @@ describe("patching", () => {
       });
 
       // Both ports should reference the same channel
-      expect(usageMap[setup.inputPorts[0]._id].channelId).toBe(setup.inputChannelIds[2]);
-      expect(usageMap[setup.inputPorts[1]._id].channelId).toBe(setup.inputChannelIds[2]);
+      expect(usageMap[setup.inputPorts[0]._id][0].channelId).toBe(setup.inputChannelIds[2]);
+      expect(usageMap[setup.inputPorts[1]._id][0].channelId).toBe(setup.inputChannelIds[2]);
     });
   });
 

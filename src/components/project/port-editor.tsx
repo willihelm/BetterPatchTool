@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { usePortData } from "./port-data-context";
+import { usePortData, isPortUsedByOther, getPortUsageDisplayName } from "./port-data-context";
 import { ChevronDown } from "lucide-react";
 
 interface PortEditorRow {
@@ -109,8 +109,9 @@ export function PortEditor<TRow extends PortEditorRow>({
                   <DropdownMenuSubContent className="max-h-64 overflow-y-auto min-w-40">
                     {group.ports.map((port) => {
                       const usage = portUsageMap[port._id];
-                      const isUsedByOther = usage && usage.channelId !== row._id;
+                      const usedByOther = isPortUsedByOther(usage, row._id);
                       const isCurrentPort = port._id === row.ioPortId;
+                      const usageDisplayName = getPortUsageDisplayName(usage);
 
                       return (
                         <DropdownMenuItem
@@ -118,17 +119,17 @@ export function PortEditor<TRow extends PortEditorRow>({
                           onClick={() => handleSelectPort(port._id)}
                           className={cn(
                             "flex items-center justify-between gap-4",
-                            isUsedByOther && "opacity-60",
+                            usedByOther && "opacity-60",
                             isCurrentPort && "bg-accent"
                           )}
                         >
                           <span className="font-mono">{port.label}</span>
-                          {isUsedByOther && (
+                          {usedByOther && (
                             <span
                               className="text-xs text-muted-foreground truncate max-w-20"
-                              title={usage.channelName}
+                              title={usageDisplayName}
                             >
-                              {usage.channelName}
+                              {usageDisplayName}
                             </span>
                           )}
                         </DropdownMenuItem>

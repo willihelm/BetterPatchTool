@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { usePortData } from "./port-data-context";
+import { usePortData, isPortUsedByOther, getPortUsageDisplayName } from "./port-data-context";
 import { ChevronDown } from "lucide-react";
 
 interface StereoPortEditorRow {
@@ -155,8 +155,8 @@ export function StereoPortEditor<TRow extends StereoPortEditorRow>({
                       {pairs.map((pair) => {
                         const leftUsage = portUsageMap[pair.left._id];
                         const rightUsage = portUsageMap[pair.right._id];
-                        const isLeftUsedByOther = leftUsage && leftUsage.channelId !== row._id;
-                        const isRightUsedByOther = rightUsage && rightUsage.channelId !== row._id;
+                        const isLeftUsedByOther = isPortUsedByOther(leftUsage, row._id);
+                        const isRightUsedByOther = isPortUsedByOther(rightUsage, row._id);
                         const isUsedByOther = isLeftUsedByOther || isRightUsedByOther;
                         const isCurrentPair = pair.left._id === row.ioPortId && pair.right._id === row.ioPortIdRight;
 
@@ -173,9 +173,9 @@ export function StereoPortEditor<TRow extends StereoPortEditorRow>({
                             <span className="font-mono">{pair.label}</span>
                             {isUsedByOther && (
                               <span className="text-xs text-muted-foreground truncate max-w-24">
-                                {isLeftUsedByOther && leftUsage.channelName}
+                                {isLeftUsedByOther && getPortUsageDisplayName(leftUsage)}
                                 {isLeftUsedByOther && isRightUsedByOther && " / "}
-                                {isRightUsedByOther && rightUsage.channelName}
+                                {isRightUsedByOther && getPortUsageDisplayName(rightUsage)}
                               </span>
                             )}
                           </DropdownMenuItem>

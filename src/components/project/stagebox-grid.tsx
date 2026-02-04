@@ -1,13 +1,22 @@
 "use client";
 
 import type { IODevice, IOPort } from "@/types/convex";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
-interface PortUsageInfo {
+interface PortUsageEntry {
   channelType: "input" | "output";
   channelId: string;
   channelName: string;
   channelNumber: number;
+  stereoSide?: "L" | "R";
 }
+
+type PortUsageInfo = PortUsageEntry[];
 
 interface StageboxGridProps {
   device: IODevice;
@@ -16,6 +25,90 @@ interface StageboxGridProps {
   portsPerRow: number;
   isHeadphone?: boolean;
   isAes?: boolean;
+}
+
+// Normalize port usage - handles both old single-object format and new array format
+function normalizeUsage(usage: PortUsageInfo | PortUsageEntry | undefined): PortUsageEntry[] {
+  if (!usage) return [];
+  // Handle old single-object format (backwards compatibility)
+  if (!Array.isArray(usage)) {
+    return [usage];
+  }
+  return usage;
+}
+
+// Format channel names for display: show first name, add * if more than 1, add L/R for stereo
+function formatChannelDisplay(usage: PortUsageInfo | PortUsageEntry | undefined): { displayText: string; tooltipText: string | null; hasRealName: boolean } {
+  const normalized = normalizeUsage(usage);
+  if (normalized.length === 0) {
+    return { displayText: "—", tooltipText: null, hasRealName: false };
+  }
+
+  // Filter to only channels with real names (not "Ch X" or "Output X" fallbacks)
+  const withRealNames = normalized.filter(u =>
+    !u.channelName.match(/^Ch \d+$/) && !u.channelName.match(/^Output \d+$/)
+  );
+
+  // Get stereo side from first entry (they should all have the same side for a given port)
+  const stereoSuffix = normalized[0].stereoSide ? ` ${normalized[0].stereoSide}` : "";
+
+  if (withRealNames.length === 0) {
+    // No real names, show first channel's fallback name
+    return { displayText: normalized[0].channelName + stereoSuffix, tooltipText: null, hasRealName: false };
+  }
+
+  // Get unique names (in case same channel is assigned via left and right)
+  const uniqueNames = [...new Set(withRealNames.map(u => u.channelName))];
+
+  // Show up to 2 names, with "..." if more than 2
+  let baseName: string;
+  if (uniqueNames.length === 1) {
+    baseName = uniqueNames[0];
+  } else if (uniqueNames.length === 2) {
+    baseName = `${uniqueNames[0]}, ${uniqueNames[1]}`;
+  } else {
+    baseName = `${uniqueNames[0]}, ${uniqueNames[1]}...`;
+  }
+  const displayText = baseName + stereoSuffix;
+
+  // Show tooltip with all names if more than 1
+  const tooltipText = uniqueNames.length > 1 ? uniqueNames.join("\n") : null;
+
+  return { displayText, tooltipText, hasRealName: true };
+}
+
+// Component to display channel name with optional tooltip
+function ChannelNameDisplay({ usage, className }: { usage: PortUsageInfo | PortUsageEntry | undefined; className?: string }) {
+  const normalized = normalizeUsage(usage);
+  const { displayText, tooltipText, hasRealName } = formatChannelDisplay(usage);
+  const hasUsage = normalized.length > 0;
+
+  const content = (
+    <div
+      className={`text-sm truncate ${
+        hasUsage && hasRealName ? "text-foreground font-medium" : "text-muted-foreground/50"
+      } ${className || ""}`}
+    >
+      {displayText}
+    </div>
+  );
+
+  if (tooltipText) {
+    return (
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {content}
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            <div className="whitespace-pre-line text-sm">{tooltipText}</div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return content;
 }
 
 // Mobile-responsive column count based on configured portsPerRow
@@ -99,14 +192,7 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
                     <div className="text-xs font-mono text-muted-foreground truncate">
                       {port.label}
                     </div>
-                    <div
-                      className={`text-sm truncate ${
-                        usage ? "text-foreground font-medium" : "text-muted-foreground/50"
-                      }`}
-                      title={usage?.channelName}
-                    >
-                      {usage?.channelName || "—"}
-                    </div>
+                    <ChannelNameDisplay usage={usage} />
                   </div>
                 );
               })}
@@ -147,14 +233,7 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
                     <div className="text-xs font-mono text-muted-foreground truncate">
                       {port.label}
                     </div>
-                    <div
-                      className={`text-sm truncate ${
-                        usage ? "text-foreground font-medium" : "text-muted-foreground/50"
-                      }`}
-                      title={usage?.channelName}
-                    >
-                      {usage?.channelName || "—"}
-                    </div>
+                    <ChannelNameDisplay usage={usage} />
                   </div>
                 );
               })}
@@ -243,14 +322,7 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
                     <div className="text-xs font-mono text-muted-foreground truncate">
                       {port.label}
                     </div>
-                    <div
-                      className={`text-sm truncate ${
-                        usage ? "text-foreground font-medium" : "text-muted-foreground/50"
-                      }`}
-                      title={usage?.channelName}
-                    >
-                      {usage?.channelName || "—"}
-                    </div>
+                    <ChannelNameDisplay usage={usage} />
                   </div>
                 );
               })}
@@ -291,14 +363,7 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
                     <div className="text-xs font-mono text-muted-foreground truncate">
                       {port.label}
                     </div>
-                    <div
-                      className={`text-sm truncate ${
-                        usage ? "text-foreground font-medium" : "text-muted-foreground/50"
-                      }`}
-                      title={usage?.channelName}
-                    >
-                      {usage?.channelName || "—"}
-                    </div>
+                    <ChannelNameDisplay usage={usage} />
                   </div>
                 );
               })}
@@ -371,14 +436,7 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
                   <div className="text-xs font-mono text-muted-foreground truncate">
                     {port.label}
                   </div>
-                  <div
-                    className={`text-sm truncate ${
-                      usage ? "text-foreground font-medium" : "text-muted-foreground/50"
-                    }`}
-                    title={usage?.channelName}
-                  >
-                    {usage?.channelName || "—"}
-                  </div>
+                  <ChannelNameDisplay usage={usage} />
                 </div>
               );
             })}
@@ -418,14 +476,7 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
                   <div className="text-xs font-mono text-muted-foreground truncate">
                     {port.label}
                   </div>
-                  <div
-                    className={`text-sm truncate ${
-                      usage ? "text-foreground font-medium" : "text-muted-foreground/50"
-                    }`}
-                    title={usage?.channelName}
-                  >
-                    {usage?.channelName || "—"}
-                  </div>
+                  <ChannelNameDisplay usage={usage} />
                 </div>
               );
             })}

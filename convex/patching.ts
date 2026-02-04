@@ -36,44 +36,73 @@ export const getAllPatchingData = query({
       if (channel.ioPortId) usedPorts.add(channel.ioPortId);
     }
 
-    // Build port usage map
+    // Build port usage map - stores array of channels per port
     const portUsageMap: Record<
       string,
-      {
+      Array<{
         channelType: "input" | "output";
         channelId: string;
         channelName: string;
         channelNumber: number;
-      }
+        stereoSide?: "L" | "R";
+      }>
     > = {};
 
     for (const channel of inputChannels) {
+      const channelName = channel.source?.trim() || "";
+      const baseEntry = {
+        channelType: "input" as const,
+        channelId: channel._id,
+        channelName: channelName || `Ch ${channel.channelNumber}`,
+        channelNumber: channel.channelNumber,
+      };
+
       if (channel.ioPortId) {
-        portUsageMap[channel.ioPortId] = {
-          channelType: "input",
-          channelId: channel._id,
-          channelName: channel.source || `Ch ${channel.channelNumber}`,
-          channelNumber: channel.channelNumber,
-        };
+        if (!portUsageMap[channel.ioPortId]) {
+          portUsageMap[channel.ioPortId] = [];
+        }
+        portUsageMap[channel.ioPortId].push({
+          ...baseEntry,
+          stereoSide: channel.ioPortIdRight ? "L" : undefined,
+        });
       }
       if (channel.ioPortIdRight) {
-        portUsageMap[channel.ioPortIdRight] = {
-          channelType: "input",
-          channelId: channel._id,
-          channelName: channel.source || `Ch ${channel.channelNumber}`,
-          channelNumber: channel.channelNumber,
-        };
+        if (!portUsageMap[channel.ioPortIdRight]) {
+          portUsageMap[channel.ioPortIdRight] = [];
+        }
+        portUsageMap[channel.ioPortIdRight].push({
+          ...baseEntry,
+          stereoSide: "R",
+        });
       }
     }
 
     for (const channel of outputChannels) {
+      const channelName = channel.busName?.trim() || channel.destination?.trim() || "";
+      const baseEntry = {
+        channelType: "output" as const,
+        channelId: channel._id,
+        channelName: channelName || `Output ${channel.order}`,
+        channelNumber: channel.order,
+      };
+
       if (channel.ioPortId) {
-        portUsageMap[channel.ioPortId] = {
-          channelType: "output",
-          channelId: channel._id,
-          channelName: channel.busName || channel.destination || `Output ${channel.order}`,
-          channelNumber: channel.order,
-        };
+        if (!portUsageMap[channel.ioPortId]) {
+          portUsageMap[channel.ioPortId] = [];
+        }
+        portUsageMap[channel.ioPortId].push({
+          ...baseEntry,
+          stereoSide: channel.ioPortIdRight ? "L" : undefined,
+        });
+      }
+      if (channel.ioPortIdRight) {
+        if (!portUsageMap[channel.ioPortIdRight]) {
+          portUsageMap[channel.ioPortIdRight] = [];
+        }
+        portUsageMap[channel.ioPortIdRight].push({
+          ...baseEntry,
+          stereoSide: "R",
+        });
       }
     }
 
@@ -179,7 +208,7 @@ export const getAllPatchingData = query({
   },
 });
 
-// Get port usage map for a project - shows which channel each port is assigned to
+// Get port usage map for a project - shows which channels each port is assigned to
 export const getPortUsageMap = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
@@ -195,43 +224,72 @@ export const getPortUsageMap = query({
 
     const usageMap: Record<
       string,
-      {
+      Array<{
         channelType: "input" | "output";
         channelId: string;
         channelName: string;
         channelNumber: number;
-      }
+        stereoSide?: "L" | "R";
+      }>
     > = {};
 
     // Map input channel port assignments
     for (const channel of inputChannels) {
+      const channelName = channel.source?.trim() || "";
+      const baseEntry = {
+        channelType: "input" as const,
+        channelId: channel._id,
+        channelName: channelName || `Ch ${channel.channelNumber}`,
+        channelNumber: channel.channelNumber,
+      };
+
       if (channel.ioPortId) {
-        usageMap[channel.ioPortId] = {
-          channelType: "input",
-          channelId: channel._id,
-          channelName: channel.source || `Ch ${channel.channelNumber}`,
-          channelNumber: channel.channelNumber,
-        };
+        if (!usageMap[channel.ioPortId]) {
+          usageMap[channel.ioPortId] = [];
+        }
+        usageMap[channel.ioPortId].push({
+          ...baseEntry,
+          stereoSide: channel.ioPortIdRight ? "L" : undefined,
+        });
       }
       if (channel.ioPortIdRight) {
-        usageMap[channel.ioPortIdRight] = {
-          channelType: "input",
-          channelId: channel._id,
-          channelName: channel.source || `Ch ${channel.channelNumber}`,
-          channelNumber: channel.channelNumber,
-        };
+        if (!usageMap[channel.ioPortIdRight]) {
+          usageMap[channel.ioPortIdRight] = [];
+        }
+        usageMap[channel.ioPortIdRight].push({
+          ...baseEntry,
+          stereoSide: "R",
+        });
       }
     }
 
     // Map output channel port assignments
     for (const channel of outputChannels) {
+      const channelName = channel.busName?.trim() || channel.destination?.trim() || "";
+      const baseEntry = {
+        channelType: "output" as const,
+        channelId: channel._id,
+        channelName: channelName || `Output ${channel.order}`,
+        channelNumber: channel.order,
+      };
+
       if (channel.ioPortId) {
-        usageMap[channel.ioPortId] = {
-          channelType: "output",
-          channelId: channel._id,
-          channelName: channel.busName || channel.destination || `Output ${channel.order}`,
-          channelNumber: channel.order,
-        };
+        if (!usageMap[channel.ioPortId]) {
+          usageMap[channel.ioPortId] = [];
+        }
+        usageMap[channel.ioPortId].push({
+          ...baseEntry,
+          stereoSide: channel.ioPortIdRight ? "L" : undefined,
+        });
+      }
+      if (channel.ioPortIdRight) {
+        if (!usageMap[channel.ioPortIdRight]) {
+          usageMap[channel.ioPortIdRight] = [];
+        }
+        usageMap[channel.ioPortIdRight].push({
+          ...baseEntry,
+          stereoSide: "R",
+        });
       }
     }
 

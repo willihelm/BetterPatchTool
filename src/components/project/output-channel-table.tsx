@@ -19,7 +19,7 @@ import {
 import { Plus, MoreVertical, ChevronUp, ChevronDown, Trash2, Zap, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { usePortData } from "./port-data-context";
+import { usePortData, isPortUsedByOther, getPortUsageDisplayName } from "./port-data-context";
 import { useChannelSelection } from "./use-channel-selection";
 import { AutoPatchDialog } from "./auto-patch-dialog";
 import { incrementTrailingNumber } from "@/lib/string-utils";
@@ -241,8 +241,8 @@ function PortCellDropdown({ row, onSelect }: PortCellDropdownProps) {
                     {pairs.map((pair) => {
                       const leftUsage = portUsageMap[pair.left._id];
                       const rightUsage = portUsageMap[pair.right._id];
-                      const isLeftUsedByOther = leftUsage && leftUsage.channelId !== row._id;
-                      const isRightUsedByOther = rightUsage && rightUsage.channelId !== row._id;
+                      const isLeftUsedByOther = isPortUsedByOther(leftUsage, row._id);
+                      const isRightUsedByOther = isPortUsedByOther(rightUsage, row._id);
                       const isUsedByOther = isLeftUsedByOther || isRightUsedByOther;
                       const isCurrentPair = pair.left._id === row.ioPortId && pair.right._id === row.ioPortIdRight;
                       return (
@@ -258,9 +258,9 @@ function PortCellDropdown({ row, onSelect }: PortCellDropdownProps) {
                           <span className="font-mono">{pair.label}</span>
                           {isUsedByOther && (
                             <span className="text-xs text-muted-foreground truncate max-w-24">
-                              {isLeftUsedByOther && leftUsage.channelName}
+                              {isLeftUsedByOther && getPortUsageDisplayName(leftUsage)}
                               {isLeftUsedByOther && isRightUsedByOther && " / "}
-                              {isRightUsedByOther && rightUsage.channelName}
+                              {isRightUsedByOther && getPortUsageDisplayName(rightUsage)}
                             </span>
                           )}
                         </DropdownMenuItem>
@@ -323,8 +323,9 @@ function PortCellDropdown({ row, onSelect }: PortCellDropdownProps) {
               <DropdownMenuSubContent className="max-h-64 overflow-y-auto min-w-40">
                 {group.ports.map((port) => {
                   const usage = portUsageMap[port._id];
-                  const isUsedByOther = usage && usage.channelId !== row._id;
+                  const isUsedByOther = isPortUsedByOther(usage, row._id);
                   const isCurrentPort = port._id === row.ioPortId;
+                  const usageDisplayName = getPortUsageDisplayName(usage);
                   return (
                     <DropdownMenuItem
                       key={port._id}
@@ -339,9 +340,9 @@ function PortCellDropdown({ row, onSelect }: PortCellDropdownProps) {
                       {isUsedByOther && (
                         <span
                           className="text-xs text-muted-foreground truncate max-w-20"
-                          title={usage.channelName}
+                          title={usageDisplayName}
                         >
-                          {usage.channelName}
+                          {usageDisplayName}
                         </span>
                       )}
                     </DropdownMenuItem>

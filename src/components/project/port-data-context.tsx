@@ -11,11 +11,37 @@ interface PortInfo {
   deviceName: string;
 }
 
-interface PortUsage {
+interface PortUsageEntry {
   channelType: "input" | "output";
   channelId: string;
   channelName: string;
   channelNumber: number;
+}
+
+type PortUsage = PortUsageEntry[];
+
+// Normalize port usage - handles both old single-object format and new array format
+function normalizeUsage(usage: PortUsage | PortUsageEntry | undefined): PortUsageEntry[] {
+  if (!usage) return [];
+  // Handle old single-object format (backwards compatibility)
+  if (!Array.isArray(usage)) {
+    return [usage];
+  }
+  return usage;
+}
+
+// Helper to check if port is used by a different channel
+export function isPortUsedByOther(usage: PortUsage | PortUsageEntry | undefined, currentChannelId: string): boolean {
+  const normalized = normalizeUsage(usage);
+  if (normalized.length === 0) return false;
+  return normalized.some(entry => entry.channelId !== currentChannelId);
+}
+
+// Helper to get the first channel name from port usage (for display when port is taken)
+export function getPortUsageDisplayName(usage: PortUsage | PortUsageEntry | undefined): string {
+  const normalized = normalizeUsage(usage);
+  if (normalized.length === 0) return "";
+  return normalized[0].channelName;
 }
 
 interface PortGroup {
