@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { Save, ChevronDown, Plus, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,9 +14,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "@/lib/date-utils";
@@ -100,15 +107,28 @@ export function SnapshotPanel({ projectId, ownerId, onRestored }: SnapshotPanelP
 
   return (
     <>
-      <div className="flex items-center gap-2">
-        <Button variant="outline" onClick={() => setCreateOpen(true)}>
-          Savepoint erstellen
-        </Button>
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetTrigger asChild>
-            <Button variant="outline">Savepoints</Button>
-          </SheetTrigger>
-          <SheetContent className="w-full sm:max-w-2xl">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" className="gap-2">
+            <Save className="h-4 w-4" />
+            Savepoint
+            <ChevronDown className="h-3 w-3 opacity-50" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Erstellen
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setSheetOpen(true)}>
+            <List className="h-4 w-4" />
+            Verwalten
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className="w-full sm:max-w-2xl">
             <SheetHeader>
               <SheetTitle>Savepoints</SheetTitle>
             </SheetHeader>
@@ -176,7 +196,6 @@ export function SnapshotPanel({ projectId, ownerId, onRestored }: SnapshotPanelP
             </div>
           </SheetContent>
         </Sheet>
-      </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-[500px]">

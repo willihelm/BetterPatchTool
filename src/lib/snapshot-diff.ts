@@ -2,17 +2,28 @@ type DiffStatus = "added" | "removed" | "modified";
 
 const SYSTEM_FIELDS = new Set(["_id", "_creationTime", "projectId"]);
 
-export type RowDiff = {
+export type RowDiff<T = Record<string, any>> = {
   order: number;
   status: DiffStatus;
   label: string;
   changedFields?: string[];
+  before?: T;
+  after?: T;
 };
 
 export type ConfigDiff = {
   added: number;
   removed: number;
   modified: number;
+};
+
+export type ItemDiff<T = Record<string, any>> = {
+  id: string;
+  status: DiffStatus;
+  label: string;
+  changedFields?: string[];
+  before?: T;
+  after?: T;
 };
 
 function getComparableKeys(value: Record<string, unknown>) {
@@ -26,7 +37,7 @@ export function diffRows<T extends Record<string, any>>(
     label: (row: T) => string;
     orderKey?: keyof T;
   }
-): RowDiff[] {
+): RowDiff<T>[] {
   const orderKey = options.orderKey ?? ("order" as keyof T);
   const snapshotByOrder = new Map<number, T>();
   const currentByOrder = new Map<number, T>();
@@ -45,7 +56,7 @@ export function diffRows<T extends Record<string, any>>(
     }
   }
 
-  const diffs: RowDiff[] = [];
+  const diffs: RowDiff<T>[] = [];
 
   for (const [order, snapshotRow] of snapshotByOrder.entries()) {
     const currentRow = currentByOrder.get(order);
@@ -54,6 +65,7 @@ export function diffRows<T extends Record<string, any>>(
         order,
         status: "removed",
         label: options.label(snapshotRow),
+        before: snapshotRow,
       });
       continue;
     }
@@ -65,6 +77,8 @@ export function diffRows<T extends Record<string, any>>(
         status: "modified",
         label: options.label(currentRow),
         changedFields,
+        before: snapshotRow,
+        after: currentRow,
       });
     }
   }
@@ -75,6 +89,7 @@ export function diffRows<T extends Record<string, any>>(
         order,
         status: "added",
         label: options.label(currentRow),
+        after: currentRow,
       });
     }
   }
@@ -137,6 +152,63 @@ export function diffConfigById<T extends Record<string, any>>(
   }
 
   return { added, removed, modified };
+}
+
+export function diffItemsById<T extends Record<string, any>>(
+  snapshotItems: T[],
+  currentItems: T[],
+  options: {
+    label: (item: T) => string;
+  }
+): ItemDiff<T>[] {
+  const snapshotMap = new Map<string, T>(
+    snapshotItems.map((item) => [String(item._id), item])
+  );
+  const currentMap = new Map<string, T>(
+    currentItems.map((item) => [String(item._id), item])
+  );
+
+  const diffs: ItemDiff<T>[] = [];
+
+  for (const item of snapshotItems) {
+    const id = String(item._id);
+    const currentItem = currentMap.get(id);
+    if (!currentItem) {
+      diffs.push({
+        id,
+        status: "removed",
+        label: options.label(item),
+        before: item,
+      });
+      continue;
+    }
+
+    const changedFields = diffFields(item, currentItem);
+    if (changedFields.length > 0) {
+      diffs.push({
+        id,
+        status: "modified",
+        label: options.label(currentItem),
+        changedFields,
+        before: item,
+        after: currentItem,
+      });
+    }
+  }
+
+  for (const item of currentItems) {
+    const id = String(item._id);
+    if (!snapshotMap.has(id)) {
+      diffs.push({
+        id,
+        status: "added",
+        label: options.label(item),
+        after: item,
+      });
+    }
+  }
+
+  return diffs;
 }
 
 export type { DiffStatus };
