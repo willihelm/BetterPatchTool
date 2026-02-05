@@ -467,7 +467,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
     {
       key: "select",
       name: "",
-      width: 40,
+      width: 32,
       frozen: true,
       renderHeaderCell: () => (
         <input
@@ -503,7 +503,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
     {
       key: "channelNumber",
       name: "Ch#",
-      width: 48,
+      width: 36,
       frozen: true,
       cellClass: "text-center font-mono text-sm",
       headerCellClass: "text-center",
@@ -512,6 +512,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
       key: "port",
       name: "Port",
       width: 140,
+      frozen: true,
       renderCell: ({ row }) => (
         <PortCellDropdown
           row={row}
@@ -529,6 +530,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
       key: "source",
       name: "Source",
       minWidth: 120,
+      frozen: true,
       renderCell: TextCell,
       renderEditCell: textEditor,
       editable: true,

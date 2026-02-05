@@ -455,7 +455,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
     {
       key: "select",
       name: "",
-      width: 40,
+      width: 32,
       frozen: true,
       renderHeaderCell: () => (
         <input
@@ -491,7 +491,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
     {
       key: "rowNumber",
       name: "#",
-      width: 48,
+      width: 36,
       frozen: true,
       cellClass: "text-center font-mono text-sm",
       headerCellClass: "text-center",
@@ -500,6 +500,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
       key: "port",
       name: "Port",
       width: 140,
+      frozen: true,
       renderCell: ({ row }) => (
         <PortCellDropdown
           row={row}
@@ -517,6 +518,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
       key: "busName",
       name: "Bus Name",
       minWidth: 120,
+      frozen: true,
       renderCell: TextCell,
       renderEditCell: textEditor,
       editable: true,

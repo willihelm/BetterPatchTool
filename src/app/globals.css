@@ -73,7 +73,8 @@
     --rdg-font-size: 14px;
     block-size: auto;
     border-radius: var(--radius);
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .rdg-cell {
@@ -134,4 +135,43 @@
     --rdg-background-color: hsl(var(--background));
     --rdg-header-background-color: hsl(var(--muted) / 0.5);
   }
+}
+
+/* Frozen column overrides - must be outside @layer for higher specificity */
+.rdg .rdg-cell.rdg-cell-frozen {
+  z-index: 2 !important;
+  background-color: #ffffff !important;
+}
+
+.rdg .rdg-cell.rdg-cell-frozen-last {
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.15);
+}
+
+.rdg .rdg-header-row .rdg-cell.rdg-cell-frozen {
+  z-index: 3 !important;
+  background-color: #e2e8f0 !important;
+}
+
+.rdg .rdg-row:hover .rdg-cell.rdg-cell-frozen {
+  background-color: #e2e8f0 !important;
+}
+
+.rdg .rdg-row.selected .rdg-cell.rdg-cell-frozen {
+  background-color: #dbeafe !important;
+}
+
+.dark .rdg .rdg-cell.rdg-cell-frozen {
+  background-color: #030712 !important;
+}
+
+.dark .rdg .rdg-cell.rdg-cell-frozen-last {
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.5);
+}
+
+.dark .rdg .rdg-header-row .rdg-cell.rdg-cell-frozen {
+  background-color: #1e293b !important;
+}
+
+.dark .rdg .rdg-row:hover .rdg-cell.rdg-cell-frozen {
+  background-color: #1e293b !important;
 }
