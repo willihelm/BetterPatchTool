@@ -25,6 +25,7 @@ interface StageboxGridProps {
   portsPerRow: number;
   isHeadphone?: boolean;
   isAes?: boolean;
+  sectionLabel?: string;
 }
 
 // Normalize port usage - handles both old single-object format and new array format
@@ -117,7 +118,7 @@ function getMobileColumns(portsPerRow: number): number {
   return Math.min(portsPerRow, 4);
 }
 
-export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadphone = false, isAes = false }: StageboxGridProps) {
+export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadphone = false, isAes = false, sectionLabel }: StageboxGridProps) {
   if (ports.length === 0) {
     return null;
   }
@@ -153,19 +154,26 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
 
     return (
       <div className="mb-6">
-        {/* Device header - responsive for mobile */}
-        <div className="flex items-center justify-between mb-2 gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-wrap">
-            <h4 className="font-medium text-sm sm:text-base">{device.name}</h4>
-            <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
-              ({device.shortName}) - {pairCount} HP {pairCount === 1 ? "Pair" : "Pairs"}
-            </span>
+        {/* Device/section header - responsive for mobile */}
+        {sectionLabel ? (
+          <div className="flex items-center gap-2 mb-2">
+            <h4 className="font-medium text-sm text-muted-foreground">{sectionLabel}</h4>
+            <span className="text-xs text-muted-foreground">({pairCount} {pairCount === 1 ? "Pair" : "Pairs"})</span>
           </div>
-          <div
-            className="w-8 sm:w-16 h-2 rounded flex-shrink-0"
-            style={{ backgroundColor: device.color }}
-          />
-        </div>
+        ) : (
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-wrap">
+              <h4 className="font-medium text-sm sm:text-base">{device.name}</h4>
+              <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+                ({device.shortName}) - {pairCount} HP {pairCount === 1 ? "Pair" : "Pairs"}
+              </span>
+            </div>
+            <div
+              className="w-8 sm:w-16 h-2 rounded flex-shrink-0"
+              style={{ backgroundColor: device.color }}
+            />
+          </div>
+        )}
 
         {/* Mobile port grid - visible on small screens */}
         <div className="border rounded-lg overflow-hidden sm:hidden">
@@ -283,19 +291,26 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
 
     return (
       <div className="mb-6">
-        {/* Device header - responsive for mobile */}
-        <div className="flex items-center justify-between mb-2 gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-wrap">
-            <h4 className="font-medium text-sm sm:text-base">{device.name}</h4>
-            <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
-              ({device.shortName}) - {pairCount} AES {pairCount === 1 ? "Pair" : "Pairs"}
-            </span>
+        {/* Device/section header - responsive for mobile */}
+        {sectionLabel ? (
+          <div className="flex items-center gap-2 mb-2">
+            <h4 className="font-medium text-sm text-muted-foreground">{sectionLabel}</h4>
+            <span className="text-xs text-muted-foreground">({pairCount} {pairCount === 1 ? "Pair" : "Pairs"})</span>
           </div>
-          <div
-            className="w-8 sm:w-16 h-2 rounded flex-shrink-0"
-            style={{ backgroundColor: device.color }}
-          />
-        </div>
+        ) : (
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-wrap">
+              <h4 className="font-medium text-sm sm:text-base">{device.name}</h4>
+              <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+                ({device.shortName}) - {pairCount} AES {pairCount === 1 ? "Pair" : "Pairs"}
+              </span>
+            </div>
+            <div
+              className="w-8 sm:w-16 h-2 rounded flex-shrink-0"
+              style={{ backgroundColor: device.color }}
+            />
+          </div>
+        )}
 
         {/* Mobile port grid - visible on small screens */}
         <div className="border rounded-lg overflow-hidden sm:hidden">
@@ -397,19 +412,26 @@ export function StageboxGrid({ device, ports, portUsageMap, portsPerRow, isHeadp
 
   return (
     <div className="mb-6">
-      {/* Device header - responsive for mobile */}
-      <div className="flex items-center justify-between mb-2 gap-2">
-        <div className="flex items-center gap-2 min-w-0 flex-wrap">
-          <h4 className="font-medium text-sm sm:text-base">{device.name}</h4>
-          <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
-            ({device.shortName}) - {ports.length} {ports[0]?.type === "input" ? "Inputs" : "Outputs"}
-          </span>
+      {/* Device/section header - responsive for mobile */}
+      {sectionLabel ? (
+        <div className="flex items-center gap-2 mb-2">
+          <h4 className="font-medium text-sm text-muted-foreground">{sectionLabel}</h4>
+          <span className="text-xs text-muted-foreground">({ports.length})</span>
         </div>
-        <div
-          className="w-8 sm:w-16 h-2 rounded flex-shrink-0"
-          style={{ backgroundColor: device.color }}
-        />
-      </div>
+      ) : (
+        <div className="flex items-center justify-between mb-2 gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+            <h4 className="font-medium text-sm sm:text-base">{device.name}</h4>
+            <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+              ({device.shortName}) - {ports.length} {ports[0]?.type === "input" ? "Inputs" : "Outputs"}
+            </span>
+          </div>
+          <div
+            className="w-8 sm:w-16 h-2 rounded flex-shrink-0"
+            style={{ backgroundColor: device.color }}
+          />
+        </div>
+      )}
 
       {/* Mobile port grid - visible on small screens */}
       <div className="border rounded-lg overflow-hidden sm:hidden">
