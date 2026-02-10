@@ -23,6 +23,7 @@ import { AutoPatchDialog } from "./auto-patch-dialog";
 import { incrementTrailingNumber } from "@/lib/string-utils";
 import { PortCellDropdown, PortDropdownContext, SELECTION_BLOCK_WINDOW, lastPortSelectionTimestamp } from "./port-cell-dropdown";
 import { TextCell, type InputChannelRow } from "./channel-table-shared";
+import { useUndoRedo } from "@/hooks/use-undo-redo";
 
 interface InputChannelTableProps {
   projectId: Id<"projects">;
@@ -39,6 +40,8 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
   const patchChannel = useMutation(api.patching.patchInputChannel);
   const toggleStereoChannel = useMutation(api.inputChannels.toggleStereo);
   const clearAllPatched = useMutation(api.inputChannels.clearAllPatched);
+
+  const { pushAction } = useUndoRedo();
 
   const [autoPatchDialogOpen, setAutoPatchDialogOpen] = useState(false);
   const [openPortDropdownRowId, setOpenPortDropdownRowId] = useState<string | null>(null);
@@ -82,19 +85,28 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
       if (!row || !originalRow) continue;
 
       const columnKey = column.key;
+      const channelId = row._id as Id<"inputChannels">;
 
       // Handle port changes
       if (columnKey === "port") {
+        const oldPortId = originalRow.ioPortId as Id<"ioPorts"> | null ?? null;
+        const oldPortIdRight = originalRow.ioPortIdRight as Id<"ioPorts"> | null ?? null;
+        const newPortId = row.ioPortId as Id<"ioPorts"> | null ?? null;
+        const newPortIdRight = row.ioPortIdRight as Id<"ioPorts"> | null ?? null;
+
         if (row.isStereo) {
-          patchChannel({
-            channelId: row._id as Id<"inputChannels">,
-            ioPortId: row.ioPortId as Id<"ioPorts"> | null ?? null,
-            ioPortIdRight: row.ioPortIdRight as Id<"ioPorts"> | null ?? null,
+          patchChannel({ channelId, ioPortId: newPortId, ioPortIdRight: newPortIdRight });
+          pushAction({
+            label: "Change port",
+            undo: async () => { await patchChannel({ channelId, ioPortId: oldPortId, ioPortIdRight: oldPortIdRight }); },
+            redo: async () => { await patchChannel({ channelId, ioPortId: newPortId, ioPortIdRight: newPortIdRight }); },
           });
         } else {
-          patchChannel({
-            channelId: row._id as Id<"inputChannels">,
-            ioPortId: row.ioPortId as Id<"ioPorts"> | null ?? null,
+          patchChannel({ channelId, ioPortId: newPortId });
+          pushAction({
+            label: "Change port",
+            undo: async () => { await patchChannel({ channelId, ioPortId: oldPortId }); },
+            redo: async () => { await patchChannel({ channelId, ioPortId: newPortId }); },
           });
         }
         continue;
@@ -104,24 +116,46 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
       const value = row[columnKey as keyof InputChannelRow];
       const originalValue = originalRow[columnKey as keyof InputChannelRow];
       if (value !== originalValue) {
-        updateChannel({
-          channelId: row._id as Id<"inputChannels">,
-          [columnKey]: value || undefined,
+        updateChannel({ channelId, [columnKey]: value || undefined });
+        pushAction({
+          label: `Edit ${columnKey}`,
+          undo: async () => { await updateChannel({ channelId, [columnKey]: originalValue || undefined }); },
+          redo: async () => { await updateChannel({ channelId, [columnKey]: value || undefined }); },
         });
       }
     }
-  }, [rows, patchChannel, updateChannel]);
+  }, [rows, patchChannel, updateChannel, pushAction]);
 
   const togglePatched = useCallback(async (channelId: string, currentValue: boolean) => {
-    await updateChannel({
-      channelId: channelId as Id<"inputChannels">,
-      patched: !currentValue,
+    const id = channelId as Id<"inputChannels">;
+    await updateChannel({ channelId: id, patched: !currentValue });
+    pushAction({
+      label: "Toggle patched",
+      undo: async () => { await updateChannel({ channelId: id, patched: currentValue }); },
+      redo: async () => { await updateChannel({ channelId: id, patched: !currentValue }); },
     });
-  }, [updateChannel]);
+  }, [updateChannel, pushAction]);
 
   const handleToggleStereo = useCallback(async (channelId: string) => {
-    await toggleStereoChannel({ channelId: channelId as Id<"inputChannels"> });
-  }, [toggleStereoChannel]);
+    // Capture state before toggle for undo
+    const row = rows.find((r) => r._id === channelId);
+    const oldIsStereo = row?.isStereo ?? false;
+    const oldPortIdRight = row?.ioPortIdRight as Id<"ioPorts"> | undefined;
+    const id = channelId as Id<"inputChannels">;
+
+    await toggleStereoChannel({ channelId: id });
+    pushAction({
+      label: "Toggle stereo",
+      undo: async () => {
+        await toggleStereoChannel({ channelId: id });
+        // If we were stereo and had a right port, restore it after toggling back
+        if (oldIsStereo && oldPortIdRight) {
+          await patchChannel({ channelId: id, ioPortId: (row?.ioPortId as Id<"ioPorts">) ?? null, ioPortIdRight: oldPortIdRight });
+        }
+      },
+      redo: async () => { await toggleStereoChannel({ channelId: id }); },
+    });
+  }, [toggleStereoChannel, pushAction, rows, patchChannel]);
 
   // Column definitions
   const columns: Column<InputChannelRow>[] = useMemo(() => [
@@ -179,10 +213,22 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
           row={row}
           portType="input"
           onSelect={(portId, portIdRight) => {
-            patchChannel({
-              channelId: row._id as Id<"inputChannels">,
-              ioPortId: portId as Id<"ioPorts"> | null,
-              ioPortIdRight: row.isStereo ? (portIdRight as Id<"ioPorts"> | null) : undefined,
+            const id = row._id as Id<"inputChannels">;
+            const oldPortId = row.ioPortId as Id<"ioPorts"> | null ?? null;
+            const oldPortIdRight = row.ioPortIdRight as Id<"ioPorts"> | null ?? null;
+            const newPortId = portId as Id<"ioPorts"> | null;
+            const newPortIdRight = row.isStereo ? (portIdRight as Id<"ioPorts"> | null) : undefined;
+            patchChannel({ channelId: id, ioPortId: newPortId, ioPortIdRight: newPortIdRight });
+            pushAction({
+              label: "Change port",
+              undo: async () => {
+                if (row.isStereo) {
+                  await patchChannel({ channelId: id, ioPortId: oldPortId, ioPortIdRight: oldPortIdRight });
+                } else {
+                  await patchChannel({ channelId: id, ioPortId: oldPortId });
+                }
+              },
+              redo: async () => { await patchChannel({ channelId: id, ioPortId: newPortId, ioPortIdRight: newPortIdRight }); },
             });
           }}
         />
@@ -324,7 +370,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
       ),
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps -- rows accessed via ref, openPortDropdownRowId excluded to prevent column recreation
-], [selection, isStereoAvailable, projectId, clearAllPatched, moveChannel, removeChannel, togglePatched, handleToggleStereo, patchChannel]);
+], [selection, isStereoAvailable, projectId, clearAllPatched, moveChannel, removeChannel, togglePatched, handleToggleStereo, patchChannel, pushAction]);
 
   const columnIndexByKey = useMemo(() => {
     const indexByKey = new Map<string, number>();
@@ -382,11 +428,17 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
       event.preventDefault();
       event.stopPropagation();
       const direction = event.key === "ArrowUp" ? "up" : "down";
-      moveChannel({ channelId: row._id as Id<"inputChannels">, direction }).then(() => {
-        // Refocus the grid after mutation to restore keyboard navigation
+      const oppositeDirection = direction === "up" ? "down" : "up";
+      const id = row._id as Id<"inputChannels">;
+      moveChannel({ channelId: id, direction }).then(() => {
         requestAnimationFrame(() => {
           gridRef.current?.querySelector<HTMLDivElement>('[role="grid"]')?.focus();
         });
+      });
+      pushAction({
+        label: `Move row ${direction}`,
+        undo: async () => { await moveChannel({ channelId: id, direction: oppositeDirection }); },
+        redo: async () => { await moveChannel({ channelId: id, direction }); },
       });
       return;
     }
@@ -405,18 +457,17 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
           const colIdx = columnIndexByKey.get(column.key);
           if (colIdx === undefined) return;
 
+          const id = row._id as Id<"inputChannels">;
+          const oldValue = row[column.key as keyof InputChannelRow];
           updateChannel({
-            channelId: row._id as Id<"inputChannels">,
+            channelId: id,
             [column.key]: newValue || undefined,
           }).then(() => {
-            // After mutation completes, click on the target cell to establish proper focus
-            // This simulates user clicking which properly restores keyboard navigation
             setTimeout(() => {
               const grid = gridRef.current?.querySelector('[role="grid"]');
               if (grid) {
-                // Find the target row (accounting for header row at index 0)
                 const rows = grid.querySelectorAll('[role="row"]');
-                const targetRow = rows[nextRowIdx + 1]; // +1 for header row
+                const targetRow = rows[nextRowIdx + 1];
                 if (targetRow) {
                   const targetCell = targetRow.children[colIdx] as HTMLElement;
                   if (targetCell?.getAttribute('role') === 'gridcell') {
@@ -425,6 +476,11 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
                 }
               }
             }, 50);
+          });
+          pushAction({
+            label: "Copy+increment",
+            undo: async () => { await updateChannel({ channelId: id, [column.key]: oldValue || undefined }); },
+            redo: async () => { await updateChannel({ channelId: id, [column.key]: newValue || undefined }); },
           });
         }
       }
@@ -435,10 +491,24 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
     if (isStereoAvailable && (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "s") {
       event.preventDefault();
       event.stopPropagation();
-      toggleStereoChannel({ channelId: row._id as Id<"inputChannels"> }).then(() => {
+      const id = row._id as Id<"inputChannels">;
+      const oldIsStereo = row.isStereo ?? false;
+      const oldPortIdRight = row.ioPortIdRight as Id<"ioPorts"> | undefined;
+      const oldPortId = row.ioPortId as Id<"ioPorts"> | undefined;
+      toggleStereoChannel({ channelId: id }).then(() => {
         requestAnimationFrame(() => {
           gridRef.current?.querySelector<HTMLDivElement>('[role="grid"]')?.focus();
         });
+      });
+      pushAction({
+        label: "Toggle stereo",
+        undo: async () => {
+          await toggleStereoChannel({ channelId: id });
+          if (oldIsStereo && oldPortIdRight) {
+            await patchChannel({ channelId: id, ioPortId: oldPortId ?? null, ioPortIdRight: oldPortIdRight });
+          }
+        },
+        redo: async () => { await toggleStereoChannel({ channelId: id }); },
       });
       return;
     }
@@ -447,8 +517,11 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
     if ((event.key === "Delete" || event.key === "Backspace") && column.key === "port") {
       event.preventDefault();
       event.stopPropagation();
+      const id = row._id as Id<"inputChannels">;
+      const oldPortId = row.ioPortId as Id<"ioPorts"> | null ?? null;
+      const oldPortIdRight = row.ioPortIdRight as Id<"ioPorts"> | null ?? null;
       patchChannel({
-        channelId: row._id as Id<"inputChannels">,
+        channelId: id,
         ioPortId: null,
         ioPortIdRight: row.isStereo ? null : undefined,
       }).then(() => {
@@ -456,9 +529,22 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
           gridRef.current?.querySelector<HTMLDivElement>('[role="grid"]')?.focus();
         });
       });
+      pushAction({
+        label: "Clear port",
+        undo: async () => {
+          if (row.isStereo) {
+            await patchChannel({ channelId: id, ioPortId: oldPortId, ioPortIdRight: oldPortIdRight });
+          } else {
+            await patchChannel({ channelId: id, ioPortId: oldPortId });
+          }
+        },
+        redo: async () => {
+          await patchChannel({ channelId: id, ioPortId: null, ioPortIdRight: row.isStereo ? null : undefined });
+        },
+      });
       return;
     }
-  }, [rows, moveChannel, updateChannel, patchChannel, isStereoAvailable, toggleStereoChannel, togglePatched, selection, columnIndexByKey]);
+  }, [rows, moveChannel, updateChannel, patchChannel, isStereoAvailable, toggleStereoChannel, togglePatched, selection, columnIndexByKey, pushAction]);
 
   // Row class for stereo and selection
   const rowClass = useCallback((row: InputChannelRow) => {

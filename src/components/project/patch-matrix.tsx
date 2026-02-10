@@ -20,6 +20,7 @@ import { usePortData } from "./port-data-context";
 import { Input } from "@/components/ui/input";
 import { ClearPatchesDialog } from "./clear-patches-dialog";
 import { ClearDevicePatchesDialog } from "./clear-device-patches-dialog";
+import { useUndoRedo } from "@/hooks/use-undo-redo";
 
 interface PatchMatrixProps {
   projectId: Id<"projects">;
@@ -66,6 +67,8 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   const updateInputChannel = useMutation(api.inputChannels.update);
   const updateOutputChannel = useMutation(api.outputChannels.update);
   const clearPatches = useMutation(api.patching.clearPatches);
+
+  const { pushAction } = useUndoRedo();
 
   const rawChannels = channelType === "input" ? inputChannels : outputChannels;
 
@@ -227,7 +230,6 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
         // Check if valid diagonal from anchor
         const end = { row: rowIndex, col: colIndex };
         if (isValidDiagonal(diagonalAnchor, end)) {
-          // Execute batch patch - note: batch patching doesn't support stereo side yet
           const cells = getDiagonalCells(diagonalAnchor, end);
           const patches = cells
             .filter((cell) => cell.row < channels.length && cell.col < visiblePorts.length)
@@ -237,57 +239,60 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
             }));
 
           if (patches.length > 0) {
-            await batchPatchChannels({
-              channelType,
-              patches,
+            // Capture old port ids for undo
+            const oldPatches = patches.map((p) => {
+              const ch = rawChannels?.find((c) => c._id === p.channelId);
+              return { channelId: p.channelId, ioPortId: ch?.ioPortId ?? null };
+            });
+
+            await batchPatchChannels({ channelType, patches });
+            pushAction({
+              label: "Diagonal patch",
+              undo: async () => { await batchPatchChannels({ channelType, patches: oldPatches }); },
+              redo: async () => { await batchPatchChannels({ channelType, patches }); },
             });
           }
         }
-        // Clear anchor after attempting diagonal (whether valid or not)
         setDiagonalAnchor(null);
         return;
       }
 
       // Normal click behavior - handle stereo side
-      if (channelType === "input") {
-        if (stereoSide === "right") {
-          // Get the current channel to preserve the left port
-          const channel = rawChannels?.find(c => c._id === channelId);
-          await patchInputChannel({
-            channelId: channelId as Id<"inputChannels">,
-            ioPortId: (channel?.ioPortId as Id<"ioPorts">) ?? null,
-            ioPortIdRight: isAssigned ? null : (portId as Id<"ioPorts">),
-          });
-        } else {
-          // Left or mono
-          const channel = rawChannels?.find(c => c._id === channelId);
-          await patchInputChannel({
-            channelId: channelId as Id<"inputChannels">,
-            ioPortId: isAssigned ? null : (portId as Id<"ioPorts">),
-            ioPortIdRight: stereoSide === "left" ? (channel?.ioPortIdRight as Id<"ioPorts">) ?? null : undefined,
-          });
-        }
+      const channel = rawChannels?.find((c) => c._id === channelId);
+      const patchFn = channelType === "input" ? patchInputChannel : patchOutputChannel;
+
+      if (stereoSide === "right") {
+        const oldPortIdRight = (channel?.ioPortIdRight as Id<"ioPorts">) ?? null;
+        const leftPortId = (channel?.ioPortId as Id<"ioPorts">) ?? null;
+        const newPortIdRight = isAssigned ? null : (portId as Id<"ioPorts">);
+        await patchFn({
+          channelId: channelId as Id<"inputChannels"> & Id<"outputChannels">,
+          ioPortId: leftPortId,
+          ioPortIdRight: newPortIdRight,
+        });
+        pushAction({
+          label: "Toggle patch",
+          undo: async () => { await patchFn({ channelId: channelId as Id<"inputChannels"> & Id<"outputChannels">, ioPortId: leftPortId, ioPortIdRight: oldPortIdRight }); },
+          redo: async () => { await patchFn({ channelId: channelId as Id<"inputChannels"> & Id<"outputChannels">, ioPortId: leftPortId, ioPortIdRight: newPortIdRight }); },
+        });
       } else {
-        if (stereoSide === "right") {
-          // Get the current channel to preserve the left port
-          const channel = rawChannels?.find(c => c._id === channelId);
-          await patchOutputChannel({
-            channelId: channelId as Id<"outputChannels">,
-            ioPortId: (channel?.ioPortId as Id<"ioPorts">) ?? null,
-            ioPortIdRight: isAssigned ? null : (portId as Id<"ioPorts">),
-          });
-        } else {
-          // Left or mono
-          const channel = rawChannels?.find(c => c._id === channelId);
-          await patchOutputChannel({
-            channelId: channelId as Id<"outputChannels">,
-            ioPortId: isAssigned ? null : (portId as Id<"ioPorts">),
-            ioPortIdRight: stereoSide === "left" ? (channel?.ioPortIdRight as Id<"ioPorts">) ?? null : undefined,
-          });
-        }
+        // Left or mono
+        const oldPortId = (channel?.ioPortId as Id<"ioPorts">) ?? null;
+        const newPortId = isAssigned ? null : (portId as Id<"ioPorts">);
+        const rightPortId = stereoSide === "left" ? ((channel?.ioPortIdRight as Id<"ioPorts">) ?? null) : undefined;
+        await patchFn({
+          channelId: channelId as Id<"inputChannels"> & Id<"outputChannels">,
+          ioPortId: newPortId,
+          ioPortIdRight: rightPortId,
+        });
+        pushAction({
+          label: "Toggle patch",
+          undo: async () => { await patchFn({ channelId: channelId as Id<"inputChannels"> & Id<"outputChannels">, ioPortId: oldPortId, ioPortIdRight: rightPortId }); },
+          redo: async () => { await patchFn({ channelId: channelId as Id<"inputChannels"> & Id<"outputChannels">, ioPortId: newPortId, ioPortIdRight: rightPortId }); },
+        });
       }
     },
-    [channelType, patchInputChannel, patchOutputChannel, batchPatchChannels, channels, rawChannels, visiblePorts, diagonalAnchor, isValidDiagonal, getDiagonalCells]
+    [channelType, patchInputChannel, patchOutputChannel, batchPatchChannels, channels, rawChannels, visiblePorts, diagonalAnchor, isValidDiagonal, getDiagonalCells, pushAction]
   );
 
   const handleKeyDown = useCallback(
@@ -336,26 +341,66 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   // Handle toggling stereo mode for a channel
   const handleToggleStereo = useCallback(
     async (channelId: string) => {
+      const ch = rawChannels?.find((c) => c._id === channelId);
+      const oldIsStereo = ch?.isStereo ?? false;
+      const oldPortIdRight = ch?.ioPortIdRight as Id<"ioPorts"> | undefined;
+      const oldPortId = ch?.ioPortId as Id<"ioPorts"> | undefined;
+
       if (channelType === "input") {
-        await toggleInputStereo({ channelId: channelId as Id<"inputChannels"> });
+        const id = channelId as Id<"inputChannels">;
+        await toggleInputStereo({ channelId: id });
+        pushAction({
+          label: "Toggle stereo",
+          undo: async () => {
+            await toggleInputStereo({ channelId: id });
+            if (oldIsStereo && oldPortIdRight) {
+              await patchInputChannel({ channelId: id, ioPortId: oldPortId ?? null, ioPortIdRight: oldPortIdRight });
+            }
+          },
+          redo: async () => { await toggleInputStereo({ channelId: id }); },
+        });
       } else {
-        await toggleOutputStereo({ channelId: channelId as Id<"outputChannels"> });
+        const id = channelId as Id<"outputChannels">;
+        await toggleOutputStereo({ channelId: id });
+        pushAction({
+          label: "Toggle stereo",
+          undo: async () => {
+            await toggleOutputStereo({ channelId: id });
+            if (oldIsStereo && oldPortIdRight) {
+              await patchOutputChannel({ channelId: id, ioPortId: oldPortId ?? null, ioPortIdRight: oldPortIdRight });
+            }
+          },
+          redo: async () => { await toggleOutputStereo({ channelId: id }); },
+        });
       }
     },
-    [channelType, toggleInputStereo, toggleOutputStereo]
+    [channelType, toggleInputStereo, toggleOutputStereo, pushAction, rawChannels, patchInputChannel, patchOutputChannel]
   );
 
   // Handle saving channel name
   const handleSaveChannelName = useCallback(
     async (channelId: string, name: string) => {
+      const oldName = editingChannel?.name ?? "";
       if (channelType === "input") {
-        await updateInputChannel({ channelId: channelId as Id<"inputChannels">, source: name });
+        const id = channelId as Id<"inputChannels">;
+        await updateInputChannel({ channelId: id, source: name });
+        pushAction({
+          label: "Edit channel name",
+          undo: async () => { await updateInputChannel({ channelId: id, source: oldName }); },
+          redo: async () => { await updateInputChannel({ channelId: id, source: name }); },
+        });
       } else {
-        await updateOutputChannel({ channelId: channelId as Id<"outputChannels">, busName: name });
+        const id = channelId as Id<"outputChannels">;
+        await updateOutputChannel({ channelId: id, busName: name });
+        pushAction({
+          label: "Edit channel name",
+          undo: async () => { await updateOutputChannel({ channelId: id, busName: oldName }); },
+          redo: async () => { await updateOutputChannel({ channelId: id, busName: name }); },
+        });
       }
       setEditingChannel(null);
     },
-    [channelType, updateInputChannel, updateOutputChannel]
+    [channelType, updateInputChannel, updateOutputChannel, pushAction, editingChannel]
   );
 
   // Calculate count of channels with patches

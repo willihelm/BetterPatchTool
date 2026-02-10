@@ -19,6 +19,7 @@ import { StageboxOverview } from "@/components/project/stagebox-overview";
 import { PortDataProvider } from "@/components/project/port-data-context";
 import { PDFExportDialog } from "@/components/project/pdf-export-dialog";
 import { SnapshotPanel } from "@/components/project/snapshot-panel";
+import { UndoRedoProvider, UndoRedoButtons } from "@/hooks/use-undo-redo";
 import type { Project, Mixer } from "@/types/convex";
 
 export default function ProjectPage() {
@@ -55,6 +56,7 @@ export default function ProjectPage() {
 
   return (
     <PortDataProvider projectId={projectId}>
+      <UndoRedoProvider>
       <div className="min-h-screen bg-background flex flex-col">
         {/* Header */}
         <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
@@ -93,6 +95,7 @@ export default function ProjectPage() {
                   setRestoreMessage(`Projekt auf Savepoint "${name}" zurückgesetzt.`)
                 }
               />
+              <UndoRedoButtons />
               <ThemeSwitcher />
                 <Button variant="ghost" size="icon">
                   <Users className="h-4 w-4" />
@@ -153,6 +156,7 @@ export default function ProjectPage() {
           projectId={projectId}
         />
       </div>
+      </UndoRedoProvider>
     </PortDataProvider>
   );
 }
