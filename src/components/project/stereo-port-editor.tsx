@@ -127,7 +127,17 @@ export function StereoPortEditor<TRow extends StereoPortEditorRow>({
             <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56">
+        <DropdownMenuContent
+          align="start"
+          className="w-56"
+          onKeyDownCapture={(e) => {
+            if (e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              handleOpenChange(false);
+            }
+          }}
+        >
           <DropdownMenuItem onClick={() => handleSelectPair(null, null)}>
             <span className="text-muted-foreground">None</span>
           </DropdownMenuItem>

@@ -86,7 +86,17 @@ export function PortEditor<TRow extends PortEditorRow>({
             <ChevronDown className="h-4 w-4 opacity-50" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-48">
+        <DropdownMenuContent
+          align="start"
+          className="w-48"
+          onKeyDownCapture={(e) => {
+            if (e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              handleOpenChange(false);
+            }
+          }}
+        >
           <DropdownMenuItem onClick={() => handleSelectPort(null)}>
             <span className="text-muted-foreground">None</span>
           </DropdownMenuItem>

@@ -165,6 +165,16 @@ export function PortCellDropdown({ row, onSelect, portType }: PortCellDropdownPr
     }
   };
 
+  // Intercept Space inside open dropdown: close menu instead of selecting item
+  const handleContentKeyDownCapture = (e: React.KeyboardEvent) => {
+    if (e.key === " ") {
+      e.preventDefault();
+      e.stopPropagation();
+      onOpenChange(false);
+      dropdownContext?.refocusGrid();
+    }
+  };
+
   if (row.isStereo) {
     return (
       <DropdownMenu open={isOpen} onOpenChange={onOpenChange}>
@@ -202,7 +212,7 @@ export function PortCellDropdown({ row, onSelect, portType }: PortCellDropdownPr
             <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56">
+        <DropdownMenuContent align="start" className="w-56" onKeyDownCapture={handleContentKeyDownCapture}>
           <DropdownMenuItem onClick={() => handleSelect(null, null)}>
             <span className="text-muted-foreground">None</span>
           </DropdownMenuItem>
@@ -288,7 +298,7 @@ export function PortCellDropdown({ row, onSelect, portType }: PortCellDropdownPr
           <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-48">
+      <DropdownMenuContent align="start" className="w-48" onKeyDownCapture={handleContentKeyDownCapture}>
         <DropdownMenuItem onClick={() => handleSelect(null)}>
           <span className="text-muted-foreground">None</span>
         </DropdownMenuItem>
