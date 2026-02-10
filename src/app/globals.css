@@ -6,6 +6,7 @@
 
 @layer base {
   :root {
+    color-scheme: light;
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -14,21 +15,22 @@
     --popover-foreground: 222.2 84% 4.9%;
     --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
+    --secondary: 210 40% 93%;
     --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
+    --muted: 210 40% 93%;
+    --muted-foreground: 215.4 25% 35%;
+    --accent: 210 40% 93%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    --border: 214.3 31.8% 82%;
+    --input: 214.3 31.8% 82%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
   }
 
   .dark {
+    color-scheme: dark;
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
     --card: 222.2 84% 4.9%;
@@ -63,8 +65,10 @@
 /* react-data-grid custom styles */
 @layer components {
   .rdg {
+    --rdg-color-scheme: light;
+    --rdg-color: hsl(var(--foreground));
     --rdg-background-color: hsl(var(--background));
-    --rdg-header-background-color: hsl(var(--muted) / 0.5);
+    --rdg-header-background-color: hsl(var(--muted));
     --rdg-header-row-height: 40px;
     --rdg-row-height: 40px;
     --rdg-row-hover-background-color: hsl(var(--muted) / 0.5);
@@ -84,7 +88,7 @@
   }
 
   .rdg-header-row .rdg-cell {
-    font-weight: 500;
+    font-weight: 600;
     font-size: 13px;
     color: hsl(var(--muted-foreground));
   }
@@ -130,8 +134,11 @@
     outline: none;
   }
 
+
   /* Dark mode adjustments */
   .dark .rdg {
+    --rdg-color-scheme: dark;
+    --rdg-color: hsl(var(--foreground));
     --rdg-background-color: hsl(var(--background));
     --rdg-header-background-color: hsl(var(--muted) / 0.5);
   }

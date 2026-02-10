@@ -16,7 +16,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Zap, X } from "lucide-react";
+import { Plus, MoreVertical, ChevronUp, ChevronDown, Trash2, Zap, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChannelSelection } from "./use-channel-selection";
 import { AutoPatchDialog } from "./auto-patch-dialog";
@@ -141,7 +141,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
               selection.clearSelection();
             }
           }}
-          className="h-4 w-4 rounded border-gray-300"
+          className="h-4 w-4 rounded"
         />
       ),
       renderCell: ({ row }) => (
@@ -157,7 +157,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
               }
             }
           }}
-          className="h-4 w-4 rounded border-gray-300"
+          className="h-4 w-4 rounded"
         />
       ),
     },
@@ -269,17 +269,13 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
       },
       renderCell: ({ row }) => (
         <div className="flex justify-center">
-          <button
-            onClick={() => togglePatched(row._id, row.patched)}
-            className={cn(
-              "h-6 w-6 rounded border-2 flex items-center justify-center transition-colors",
-              row.patched
-                ? "bg-green-500 border-green-500 text-white"
-                : "border-muted-foreground/30 hover:border-muted-foreground"
-            )}
-          >
-            {row.patched && <Check className="h-4 w-4" />}
-          </button>
+          <input
+            type="checkbox"
+            checked={row.patched}
+            onChange={() => togglePatched(row._id, row.patched)}
+            tabIndex={-1}
+            className="h-4 w-4 rounded"
+          />
         </div>
       ),
     },
@@ -351,6 +347,22 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
 
     // Only handle in SELECT mode
     if (mode !== "SELECT") return;
+
+    // Space on select column: Toggle row selection
+    if (event.key === " " && column.key === "select") {
+      event.preventDefault();
+      event.stopPropagation();
+      selection.toggleSelection(row._id);
+      return;
+    }
+
+    // Space on patched column: Toggle checkbox
+    if (event.key === " " && column.key === "patched") {
+      event.preventDefault();
+      event.stopPropagation();
+      togglePatched(row._id, row.patched);
+      return;
+    }
 
     // Enter or Space on port column: Open dropdown
     // But block if we just made a selection (prevents key repeat from reopening)
@@ -446,7 +458,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
       });
       return;
     }
-  }, [rows, moveChannel, updateChannel, patchChannel, isStereoAvailable, toggleStereoChannel, columnIndexByKey]);
+  }, [rows, moveChannel, updateChannel, patchChannel, isStereoAvailable, toggleStereoChannel, togglePatched, selection, columnIndexByKey]);
 
   // Row class for stereo and selection
   const rowClass = useCallback((row: InputChannelRow) => {

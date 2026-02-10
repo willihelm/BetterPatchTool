@@ -128,7 +128,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
               selection.clearSelection();
             }
           }}
-          className="h-4 w-4 rounded border-gray-300"
+          className="h-4 w-4 rounded"
         />
       ),
       renderCell: ({ row }) => (
@@ -144,7 +144,7 @@ export function OutputChannelTable({ projectId }: OutputChannelTableProps) {
               }
             }
           }}
-          className="h-4 w-4 rounded border-gray-300"
+          className="h-4 w-4 rounded"
         />
       ),
     },
