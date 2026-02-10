@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { Id } from "../../../convex/_generated/dataModel";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,12 +32,12 @@ export default function DashboardPage() {
   const duplicateProject = useMutation(api.projects.duplicate);
 
   const handleArchive = async (projectId: string) => {
-    await archiveProject({ projectId: projectId as any });
+    await archiveProject({ projectId: projectId as Id<"projects"> });
   };
 
   const handleDuplicate = async (projectId: string, title: string) => {
     await duplicateProject({
-      projectId: projectId as any,
+      projectId: projectId as Id<"projects">,
       newTitle: `${title} (Copy)`,
       ownerId: DEMO_USER_ID,
     });

@@ -44,7 +44,7 @@ export function getPortUsageDisplayName(usage: PortUsage | PortUsageEntry | unde
   return normalized[0].channelName;
 }
 
-interface PortGroup {
+export interface PortGroup {
   device: {
     _id: string;
     name: string;

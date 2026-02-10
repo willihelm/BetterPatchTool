@@ -29,8 +29,6 @@ export default function ProjectPage() {
 
   const project = useQuery(api.projects.get, { projectId }) as Project | null | undefined;
   const mixers = useQuery(api.mixers.list, { projectId }) as Mixer[] | undefined;
-  const inputChannels = useQuery(api.inputChannels.list, { projectId });
-  const outputChannels = useQuery(api.outputChannels.list, { projectId });
 
   if (project === undefined) {
     return (
@@ -106,8 +104,6 @@ export default function ProjectPage() {
                   <MixerSettingsDialog
                     projectId={projectId}
                     mixer={currentMixer}
-                    currentInputChannelCount={inputChannels?.length ?? 0}
-                    currentOutputChannelCount={outputChannels?.length ?? 0}
                   />
                 )}
               </div>
@@ -153,8 +149,6 @@ export default function ProjectPage() {
           open={exportDialogOpen}
           onOpenChange={setExportDialogOpen}
           project={project}
-          inputChannels={inputChannels ?? []}
-          outputChannels={outputChannels ?? []}
           mixers={mixers ?? []}
           projectId={projectId}
         />

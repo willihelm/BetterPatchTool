@@ -122,7 +122,7 @@ export const StereoEditableCell = memo(function StereoEditableCell({
       inputRefRight.current?.select();
     } else if ((e.key === "Delete" || e.key === "Backspace") && e.ctrlKey === false && e.metaKey === false) {
       // On Delete/Backspace without modifiers, clear the field (default behavior)
-    } else if ((e as any).altKey && (e as any).code === "Enter" && !isEditing) {
+    } else if (e.altKey && e.code === "Enter" && !isEditing) {
       // Alt+Enter to copy from above
       e.preventDefault();
       const copied = onCopyFromAbove?.(rowIndex, columnId);

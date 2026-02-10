@@ -33,8 +33,6 @@ interface PDFExportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   project: Project;
-  inputChannels: InputChannel[];
-  outputChannels: OutputChannel[];
   mixers: Mixer[];
   projectId: Id<"projects">;
 }
@@ -43,11 +41,11 @@ export function PDFExportDialog({
   open,
   onOpenChange,
   project,
-  inputChannels,
-  outputChannels,
   mixers,
   projectId,
 }: PDFExportDialogProps) {
+  const inputChannels = useQuery(api.inputChannels.list, { projectId }) ?? [];
+  const outputChannels = useQuery(api.outputChannels.list, { projectId }) ?? [];
   const [options, setOptions] = useState<PDFExportOptions>(defaultPDFExportOptions);
   const [isExporting, setIsExporting] = useState(false);
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useMutation } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
@@ -29,23 +29,25 @@ import type { Mixer } from "@/types/convex";
 interface MixerSettingsDialogProps {
   projectId: Id<"projects">;
   mixer: Mixer;
-  currentInputChannelCount: number;
-  currentOutputChannelCount: number;
 }
 
 export function MixerSettingsDialog({
   projectId,
   mixer,
-  currentInputChannelCount,
-  currentOutputChannelCount,
 }: MixerSettingsDialogProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(mixer.name);
   const [type, setType] = useState(mixer.type || "");
   const [stereoMode, setStereoMode] = useState(mixer.stereoMode);
   const [inputChannelCount, setInputChannelCount] = useState(mixer.channelCount.toString());
-  const [outputChannelCount, setOutputChannelCount] = useState(currentOutputChannelCount.toString());
+  const [outputChannelCount, setOutputChannelCount] = useState("0");
   const [isLoading, setIsLoading] = useState(false);
+
+  const inputChannels = useQuery(api.inputChannels.list, { projectId });
+  const outputChannels = useQuery(api.outputChannels.list, { projectId });
+
+  const currentInputChannelCount = inputChannels?.length ?? 0;
+  const currentOutputChannelCount = outputChannels?.length ?? 0;
 
   const updateMixer = useMutation(api.mixers.update);
   const generateInputChannels = useMutation(api.inputChannels.generateChannelsUpTo);
