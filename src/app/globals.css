@@ -12,8 +12,8 @@
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 196 100% 50%; /* #00deff Neon Cyan */
+    --primary-foreground: 222.2 47.4% 11.2%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
@@ -24,30 +24,41 @@
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    --ring: 196 100% 50%;
+    --radius: 0.25rem; /* Sharper edges */
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
+    --background: 222 47% 11%;   /* #0f172a Slate 900 */
+    --foreground: 210 40% 98%;   /* Slate 50 */
+    
+    --card: 217 33% 17%;         /* #1e293b Slate 800 */
     --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
+
+    --popover: 217 33% 17%;
     --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+
+    --primary: 196 100% 50%;     /* #00deff Neon Cyan */
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 215 28% 17%;    /* Slate 800/900 mix */
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20.2% 65.1%; /* Slate 400 */
+
+    --accent: 196 100% 50%;
+    --accent-foreground: 222 47% 11%;
+
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+
+    --border: 217 33% 20%;      /* Slightly lighter than card */
+    --input: 217 33% 20%;
+    --ring: 196 100% 50%;
+    
+    /* Custom - Technical Grid Colors */
+    --grid-line: 217 33% 25%;
   }
 }
 
@@ -60,14 +71,29 @@
   }
 }
 
+/* Technical / Grid Aesthetic Utilities */
+@layer utilities {
+  .font-mono-numbers {
+    font-variant-numeric: tabular-nums;
+  }
+  
+  .tech-border {
+    @apply border border-border/50;
+  }
+  
+  .glass-panel {
+    @apply bg-card/90 backdrop-blur-sm border border-white/10 shadow-lg;
+  }
+}
+
 /* react-data-grid custom styles */
 @layer components {
   .rdg {
     --rdg-background-color: hsl(var(--background));
-    --rdg-header-background-color: hsl(var(--muted) / 0.5);
-    --rdg-header-row-height: 40px;
-    --rdg-row-height: 40px;
-    --rdg-row-hover-background-color: hsl(var(--muted) / 0.5);
+    --rdg-header-background-color: hsl(var(--muted));
+    --rdg-header-row-height: 44px; /* Slightly taller for touch targets */
+    --rdg-row-height: 48px;        /* Comfortable density */
+    --rdg-row-hover-background-color: hsl(var(--secondary));
     --rdg-selection-color: hsl(var(--primary));
     --rdg-border-color: hsl(var(--border));
     --rdg-font-size: 14px;
@@ -75,23 +101,27 @@
     border-radius: var(--radius);
     overflow-x: auto;
     overflow-y: hidden;
+    @apply border border-border font-mono-numbers;
   }
 
   .rdg-cell {
-    padding: 0 8px;
-    border-right: none;
+    padding: 0 12px;
+    border-right: 1px solid var(--rdg-border-color); /* Vert lines for grid look */
     border-bottom: 1px solid var(--rdg-border-color);
   }
 
   .rdg-header-row .rdg-cell {
-    font-weight: 500;
-    font-size: 13px;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
     color: hsl(var(--muted-foreground));
+    border-bottom: 2px solid var(--rdg-border-color); /* Heavier header line */
   }
 
   .rdg-cell[aria-selected="true"] {
     box-shadow: inset 0 0 0 2px hsl(var(--primary));
-    background-color: hsl(var(--primary) / 0.05);
+    background-color: hsl(var(--primary) / 0.1);
   }
 
   .rdg-row:hover {
@@ -99,12 +129,12 @@
   }
 
   .rdg-row.selected {
-    background-color: hsl(var(--primary) / 0.05);
+    background-color: hsl(var(--primary) / 0.1);
   }
 
   /* Stereo row height */
   .rdg-row.stereo-row {
-    --rdg-row-height: 64px;
+    --rdg-row-height: 72px;
   }
 
   /* Remove focus outline, we use box-shadow instead */
@@ -118,8 +148,8 @@
     box-sizing: border-box;
     inline-size: 100%;
     block-size: 100%;
-    padding: 0 6px;
-    border: none;
+    padding: 0 10px;
+    border: 2px solid hsl(var(--primary));
     font-family: inherit;
     font-size: inherit;
     background-color: hsl(var(--background));
@@ -133,45 +163,47 @@
   /* Dark mode adjustments */
   .dark .rdg {
     --rdg-background-color: hsl(var(--background));
-    --rdg-header-background-color: hsl(var(--muted) / 0.5);
+    --rdg-header-background-color: hsl(var(--card));
   }
 }
 
 /* Frozen column overrides - must be outside @layer for higher specificity */
 .rdg .rdg-cell.rdg-cell-frozen {
   z-index: 2 !important;
-  background-color: #ffffff !important;
+  background-color: hsl(var(--background)) !important;
 }
 
 .rdg .rdg-cell.rdg-cell-frozen-last {
-  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.15);
+  box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.3);
+  border-right: 2px solid hsl(var(--primary) / 0.5) !important; /* Accent divider */
 }
 
 .rdg .rdg-header-row .rdg-cell.rdg-cell-frozen {
   z-index: 3 !important;
-  background-color: #e2e8f0 !important;
+  background-color: hsl(var(--muted)) !important;
 }
 
 .rdg .rdg-row:hover .rdg-cell.rdg-cell-frozen {
-  background-color: #e2e8f0 !important;
+  background-color: hsl(var(--secondary)) !important;
 }
 
 .rdg .rdg-row.selected .rdg-cell.rdg-cell-frozen {
-  background-color: #dbeafe !important;
+  background-color: hsl(var(--primary) / 0.1) !important;
 }
 
 .dark .rdg .rdg-cell.rdg-cell-frozen {
-  background-color: #030712 !important;
+  background-color: hsl(var(--background)) !important;
+  border-right: 1px solid hsl(var(--border));
 }
 
 .dark .rdg .rdg-cell.rdg-cell-frozen-last {
-  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.5);
+   border-right: 2px solid hsl(var(--primary) / 0.5) !important;
 }
 
 .dark .rdg .rdg-header-row .rdg-cell.rdg-cell-frozen {
-  background-color: #1e293b !important;
+  background-color: hsl(var(--card)) !important;
 }
 
 .dark .rdg .rdg-row:hover .rdg-cell.rdg-cell-frozen {
-  background-color: #1e293b !important;
+  background-color: hsl(var(--secondary)) !important;
 }

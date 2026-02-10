@@ -9,7 +9,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Download, Users } from "lucide-react";
+import { ArrowLeft, Download, Users, Settings2, Share2, Save } from "lucide-react";
 import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import { PatchList } from "@/components/project/patch-list";
 import { IOOverview } from "@/components/project/io-overview";
@@ -35,7 +35,10 @@ export default function ProjectPage() {
   if (project === undefined) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading project...</div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+          <div className="animate-pulse text-muted-foreground font-mono text-xs uppercase tracking-widest">Loading project data...</div>
+        </div>
       </div>
     );
   }
@@ -57,24 +60,24 @@ export default function ProjectPage() {
 
   return (
     <PortDataProvider projectId={projectId}>
-      <div className="min-h-screen bg-background flex flex-col">
-        {/* Header */}
-        <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-          <div className="container mx-auto px-4 py-3">
+      <div className="min-h-screen bg-background flex flex-col font-sans">
+        {/* Header - Technical Panel Look */}
+        <header className="border-b border-border/50 bg-card/80 backdrop-blur-md sticky top-0 z-50">
+          <div className="container mx-auto px-4 py-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" asChild>
+                <Button variant="ghost" size="icon" asChild className="h-8 w-8 hover:bg-primary/10 hover:text-primary">
                   <Link href="/dashboard">
                     <ArrowLeft className="h-4 w-4" />
                   </Link>
                 </Button>
-                <div>
-                  <h1 className="text-lg font-semibold">{project.title}</h1>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="flex flex-col">
+                  <h1 className="text-lg font-bold uppercase tracking-tight leading-none text-foreground">{project.title}</h1>
+                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground mt-1 font-mono">
                     {project.date && <span>{project.date}</span>}
                     {project.venue && (
                       <>
-                        {project.date && <span>·</span>}
+                        <span className="text-primary/50">///</span>
                         <span>{project.venue}</span>
                       </>
                     )}
@@ -84,24 +87,31 @@ export default function ProjectPage() {
 
               <div className="flex items-center gap-2">
                 {currentMixer && (
-                  <Badge variant="outline" className="hidden sm:flex">
-                    {currentMixer.name} ({currentMixer.channelCount}ch)
-                  </Badge>
+                  <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-muted/30 rounded border border-border/50 mr-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_5px_#22c55e]" />
+                    <span className="text-xs font-mono font-bold">{currentMixer.name}</span>
+                    <span className="text-[10px] text-muted-foreground ml-1">({currentMixer.channelCount}CH)</span>
+                  </div>
                 )}
+
+                <div className="h-6 w-px bg-border/50 mx-1" />
+
                 <SnapshotPanel
-                projectId={projectId}
-                ownerId={project.ownerId}
-                onRestored={(name) =>
-                  setRestoreMessage(`Projekt auf Savepoint "${name}" zurückgesetzt.`)
-                }
-              />
-              <ThemeSwitcher />
-                <Button variant="ghost" size="icon">
+                  projectId={projectId}
+                  ownerId={project.ownerId}
+                  onRestored={(name) =>
+                    setRestoreMessage(`Restored "${name}".`)
+                  }
+                />
+
+                <Button variant="ghost" size="icon" title="Collaborators" className="h-8 w-8">
                   <Users className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => setExportDialogOpen(true)}>
+
+                <Button variant="ghost" size="icon" onClick={() => setExportDialogOpen(true)} title="Export" className="h-8 w-8">
                   <Download className="h-4 w-4" />
                 </Button>
+
                 {currentMixer && (
                   <MixerSettingsDialog
                     projectId={projectId}
@@ -110,40 +120,58 @@ export default function ProjectPage() {
                     currentOutputChannelCount={outputChannels?.length ?? 0}
                   />
                 )}
+
+                <div className="ml-1">
+                  <ThemeSwitcher />
+                </div>
               </div>
             </div>
           </div>
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 container mx-auto px-4 py-4">
-        {restoreMessage && (
-          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-            {restoreMessage}
-          </div>
-        )}
-          <Tabs defaultValue="patch-list" className="h-full">
-            <TabsList className="mb-4">
-              <TabsTrigger value="patch-list">Patch List</TabsTrigger>
-              <TabsTrigger value="matrix">Patch Matrix</TabsTrigger>
-              <TabsTrigger value="stageboxes">Stageboxes</TabsTrigger>
-              <TabsTrigger value="io-devices">IO Devices</TabsTrigger>
-            </TabsList>
+        <main className="flex-1 container mx-auto px-4 py-4 flex flex-col h-[calc(100vh-60px)]">
+          {restoreMessage && (
+            <div className="mb-4 rounded border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-xs font-mono text-emerald-400 flex items-center">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2 animate-pulse" />
+              {restoreMessage}
+            </div>
+          )}
 
-            <TabsContent value="patch-list" className="mt-0">
-              <PatchList projectId={projectId} />
+          <Tabs defaultValue="patch-list" className="flex-1 flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <TabsList className="w-auto border-b-0 gap-8 h-10 px-0">
+                <TabsTrigger value="patch-list" className="px-0 pb-2 text-xs font-bold">PATCH LIST</TabsTrigger>
+                <TabsTrigger value="matrix" className="px-0 pb-2 text-xs font-bold">MATRIX GRID</TabsTrigger>
+                <TabsTrigger value="stageboxes" className="px-0 pb-2 text-xs font-bold">STAGEBOXES</TabsTrigger>
+                <TabsTrigger value="io-devices" className="px-0 pb-2 text-xs font-bold">I/O DEVICES</TabsTrigger>
+              </TabsList>
+            </div>
+
+            <div className="w-full h-px bg-border/50 mb-4" />
+
+            <TabsContent value="patch-list" className="mt-0 flex-1 outline-none data-[state=inactive]:hidden">
+              <div className="h-full border border-border/40 rounded-sm bg-card/30 backdrop-blur-sm overflow-hidden">
+                <PatchList projectId={projectId} />
+              </div>
             </TabsContent>
 
-            <TabsContent value="matrix" className="mt-0">
-              <PatchMatrix projectId={projectId} />
+            <TabsContent value="matrix" className="mt-0 flex-1 outline-none data-[state=inactive]:hidden">
+              <div className="h-full border border-border/40 rounded-sm bg-card/30 backdrop-blur-sm p-4 overflow-hidden">
+                <PatchMatrix projectId={projectId} />
+              </div>
             </TabsContent>
 
-            <TabsContent value="stageboxes" className="mt-0">
-              <StageboxOverview projectId={projectId} />
+            <TabsContent value="stageboxes" className="mt-0 flex-1 outline-none data-[state=inactive]:hidden">
+              <div className="h-full border border-border/40 rounded-sm bg-card/30 backdrop-blur-sm p-4 overflow-auto">
+                <StageboxOverview projectId={projectId} />
+              </div>
             </TabsContent>
 
-            <TabsContent value="io-devices" className="mt-0">
-              <IOOverview projectId={projectId} />
+            <TabsContent value="io-devices" className="mt-0 flex-1 outline-none data-[state=inactive]:hidden">
+              <div className="h-full border border-border/40 rounded-sm bg-card/30 backdrop-blur-sm p-4 overflow-auto">
+                <IOOverview projectId={projectId} />
+              </div>
             </TabsContent>
           </Tabs>
         </main>
