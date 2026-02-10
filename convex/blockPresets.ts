@@ -16,13 +16,29 @@ const channelDefinition = v.object({
 export const list = query({
   args: { userId: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const presets = await ctx.db.query("blockPresets").collect();
+    const publicPresetsPromise = ctx.db
+      .query("blockPresets")
+      .withIndex("by_public", (q) => q.eq("isPublic", true))
+      .collect();
 
-    return presets.filter(p =>
-      p.isPublic ||
-      p.userId === null || // System presets
-      p.userId === args.userId
-    );
+    const userPresetsPromise = args.userId
+      ? ctx.db
+          .query("blockPresets")
+          .withIndex("by_user", (q) => q.eq("userId", args.userId))
+          .collect()
+      : Promise.resolve([]);
+
+    const [publicPresets, userPresets] = await Promise.all([
+      publicPresetsPromise,
+      userPresetsPromise,
+    ]);
+
+    const combined = new Map(publicPresets.map((preset) => [preset._id, preset]));
+    for (const preset of userPresets) {
+      combined.set(preset._id, preset);
+    }
+
+    return Array.from(combined.values());
   },
 });
 
@@ -100,22 +116,21 @@ export const createFromChannels = mutation({
     channelIds: v.array(v.id("inputChannels")),
   },
   handler: async (ctx, args) => {
-    const channels = [];
+    const existingChannels = await Promise.all(
+      args.channelIds.map((channelId) => ctx.db.get(channelId))
+    );
 
-    for (const channelId of args.channelIds) {
-      const channel = await ctx.db.get(channelId);
-      if (channel) {
-        channels.push({
-          source: channel.source,
-          uhf: channel.uhf,
-          micInputDev: channel.micInputDev,
-          location: channel.location,
-          cable: channel.cable,
-          stand: channel.stand,
-          notes: channel.notes,
-        });
-      }
-    }
+    const channels = existingChannels
+      .filter((channel): channel is NonNullable<typeof channel> => channel !== null)
+      .map((channel) => ({
+        source: channel.source,
+        uhf: channel.uhf,
+        micInputDev: channel.micInputDev,
+        location: channel.location,
+        cable: channel.cable,
+        stand: channel.stand,
+        notes: channel.notes,
+      }));
 
     return await ctx.db.insert("blockPresets", {
       userId: args.userId,
@@ -134,7 +149,7 @@ export const initSystemPresets = mutation({
     // Check if system presets already exist
     const existing = await ctx.db
       .query("blockPresets")
-      .filter((q) => q.eq(q.field("userId"), undefined))
+      .withIndex("by_user", (q) => q.eq("userId", undefined))
       .first();
 
     if (existing) return "System presets already exist";

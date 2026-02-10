@@ -109,9 +109,11 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   }, [rawChannels]);
 
   // Filter port groups by selected devices
-  const filteredPortGroups = portGroups?.filter((group) =>
-    selectedDeviceIds.has(group.device._id)
-  ) ?? [];
+  const filteredPortGroups = useMemo(
+    () =>
+      portGroups?.filter((group) => selectedDeviceIds.has(group.device._id)) ?? [],
+    [portGroups, selectedDeviceIds]
+  );
 
   // Flatten ports for matrix columns
   const allPorts = filteredPortGroups.flatMap((group) =>
@@ -415,8 +417,6 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
     return portGroups.map((g) => g.device._id).sort();
   }, [portGroups]);
 
-  const deviceIdsKey = deviceIds.join(",");
-
   // Initialize device selection when port groups load
   useEffect(() => {
     if (deviceIds.length > 0 && !isDeviceFilterInitialized) {
@@ -431,7 +431,6 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
       const currentDeviceIds = new Set(deviceIds);
       setSelectedDeviceIds((prev) => {
         // Check if anything actually changed
-        const prevIds = Array.from(prev).sort().join(",");
         const hasNewDevices = deviceIds.some((id) => !prev.has(id));
         const hasRemovedDevices = Array.from(prev).some((id) => !currentDeviceIds.has(id));
 
@@ -455,7 +454,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
         return next;
       });
     }
-  }, [deviceIdsKey, isDeviceFilterInitialized]);
+  }, [deviceIds, isDeviceFilterInitialized]);
 
   // Reset active cell if it becomes invalid after filtering
   useEffect(() => {

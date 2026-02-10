@@ -20,6 +20,7 @@ export default defineSchema({
     isArchived: v.boolean(),
   })
     .index("by_owner", ["ownerId"])
+    .index("by_owner_and_archived", ["ownerId", "isArchived"])
     .index("by_archived", ["isArchived"]),
 
   // Mixers
@@ -74,7 +75,9 @@ export default defineSchema({
     name: v.string(),
     color: v.optional(v.string()),
     order: v.number(),
-  }).index("by_project", ["projectId"]),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_and_order", ["projectId", "order"]),
 
   // Input Channels
   inputChannels: defineTable({
@@ -100,7 +103,8 @@ export default defineSchema({
     .index("by_project", ["projectId"])
     .index("by_project_and_order", ["projectId", "order"])
     .index("by_group", ["groupId"])
-    .index("by_ioPort", ["ioPortId"]),
+    .index("by_ioPort", ["ioPortId"])
+    .index("by_ioPortRight", ["ioPortIdRight"]),
 
   // Output Channels
   outputChannels: defineTable({
@@ -121,7 +125,8 @@ export default defineSchema({
   })
     .index("by_project", ["projectId"])
     .index("by_project_and_order", ["projectId", "order"])
-    .index("by_ioPort", ["ioPortId"]),
+    .index("by_ioPort", ["ioPortId"])
+    .index("by_ioPortRight", ["ioPortIdRight"]),
 
   // Templates
   templates: defineTable({
@@ -156,7 +161,9 @@ export default defineSchema({
     name: v.string(),
     note: v.optional(v.string()),
     dataVersion: v.number(),
-  }).index("by_project", ["projectId"]),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_and_createdAt", ["projectId", "createdAt"]),
 
   projectSnapshotData: defineTable({
     snapshotId: v.id("projectSnapshots"),

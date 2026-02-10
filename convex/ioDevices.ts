@@ -422,7 +422,7 @@ export const updatePortCounts = mutation({
         // Also check ioPortIdRight for stereo
         const stereoChannels = await ctx.db
           .query("inputChannels")
-          .filter((q) => q.eq(q.field("ioPortIdRight"), port._id))
+          .withIndex("by_ioPortRight", (q) => q.eq("ioPortIdRight", port._id))
           .collect();
         for (const channel of stereoChannels) {
           await ctx.db.patch(channel._id, { ioPortIdRight: undefined });
@@ -540,7 +540,7 @@ export const updatePortCounts = mutation({
         // Also check ioPortIdRight for stereo
         const stereoChannels = await ctx.db
           .query("inputChannels")
-          .filter((q) => q.eq(q.field("ioPortIdRight"), port._id))
+          .withIndex("by_ioPortRight", (q) => q.eq("ioPortIdRight", port._id))
           .collect();
         for (const channel of stereoChannels) {
           await ctx.db.patch(channel._id, { ioPortIdRight: undefined });

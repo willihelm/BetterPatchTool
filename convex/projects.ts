@@ -7,8 +7,9 @@ export const list = query({
   handler: async (ctx, args) => {
     return await ctx.db
       .query("projects")
-      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
-      .filter((q) => q.eq(q.field("isArchived"), false))
+      .withIndex("by_owner_and_archived", (q) =>
+        q.eq("ownerId", args.ownerId).eq("isArchived", false)
+      )
       .collect();
   },
 });

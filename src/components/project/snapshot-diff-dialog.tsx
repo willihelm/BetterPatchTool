@@ -54,6 +54,12 @@ type SideBySideDiff<T> = {
   after?: T;
 };
 
+type DiffCounts = {
+  added: number;
+  removed: number;
+  modified: number;
+};
+
 interface SnapshotDiffDialogProps {
   projectId: Id<"projects">;
   snapshotId: Id<"projectSnapshots"> | null;
@@ -71,7 +77,7 @@ function isMeaningful(value: unknown) {
   return true;
 }
 
-function formatFallback(value: unknown) {
+function formatFallback(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "string") return value.trim() === "" ? "—" : value;
   if (typeof value === "boolean") return value ? "true" : "false";
@@ -200,7 +206,7 @@ function SideBySideDiffBlock({ rows }: { rows: SideBySideRow[] }) {
   );
 }
 
-function countDiffs(diffs: Array<{ status: DiffStatus }>) {
+function countDiffs(diffs: Array<{ status: DiffStatus }>): DiffCounts {
   return diffs.reduce(
     (acc, diff) => {
       if (diff.status === "added") acc.added += 1;
@@ -500,6 +506,16 @@ export function SnapshotDiffDialog({
     };
   }, [snapshotResult, inputChannels, outputChannels, mixers, ioDevices, groups, project]);
 
+  const configSummaryRows: Array<{ label: string; diff: DiffCounts }> = diffData
+    ? [
+        { label: "Project", diff: diffData.configSummary.project },
+        { label: "Mixers", diff: diffData.configSummary.mixers },
+        { label: "IO Devices", diff: diffData.configSummary.ioDevices },
+        { label: "IO Ports", diff: diffData.configSummary.ioPorts },
+        { label: "Groups", diff: diffData.configSummary.groups },
+      ]
+    : [];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl">
@@ -560,14 +576,8 @@ export function SnapshotDiffDialog({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {[
-                      ["Project", diffData.configSummary.project],
-                      ["Mixers", diffData.configSummary.mixers],
-                      ["IO Devices", diffData.configSummary.ioDevices],
-                      ["IO Ports", diffData.configSummary.ioPorts],
-                      ["Groups", diffData.configSummary.groups],
-                    ].map(([label, diff]) => (
-                      <TableRow key={label as string}>
+                    {configSummaryRows.map(({ label, diff }) => (
+                      <TableRow key={label}>
                         <TableCell>{label}</TableCell>
                         <TableCell>{diff.added}</TableCell>
                         <TableCell>{diff.removed}</TableCell>

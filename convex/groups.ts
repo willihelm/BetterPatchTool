@@ -7,7 +7,7 @@ export const list = query({
   handler: async (ctx, args) => {
     return await ctx.db
       .query("groups")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
       .collect();
   },
 });

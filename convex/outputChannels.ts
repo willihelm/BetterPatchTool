@@ -5,12 +5,10 @@ import { mutation, query } from "./_generated/server";
 export const list = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
-    const channels = await ctx.db
+    return await ctx.db
       .query("outputChannels")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
       .collect();
-
-    return channels.sort((a, b) => a.order - b.order);
   },
 });
 
@@ -39,15 +37,13 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Höchste Order ermitteln
-    const channels = await ctx.db
+    const latestChannel = await ctx.db
       .query("outputChannels")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
+      .order("desc")
+      .first();
 
-    const maxOrder = channels.length > 0
-      ? Math.max(...channels.map(c => c.order))
-      : 0;
+    const maxOrder = latestChannel?.order ?? 0;
 
     return await ctx.db.insert("outputChannels", {
       projectId: args.projectId,
@@ -109,7 +105,7 @@ export const generateChannelsUpTo = mutation({
   handler: async (ctx, args) => {
     const existingChannels = await ctx.db
       .query("outputChannels")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
       .collect();
 
     const currentCount = existingChannels.length;
@@ -174,21 +170,19 @@ export const moveChannel = mutation({
 
     const allChannels = await ctx.db
       .query("outputChannels")
-      .withIndex("by_project", (q) => q.eq("projectId", channel.projectId))
+      .withIndex("by_project_and_order", (q) => q.eq("projectId", channel.projectId))
       .collect();
-
-    const sorted = allChannels.sort((a, b) => a.order - b.order);
-    const currentIndex = sorted.findIndex(c => c._id === args.channelId);
+    const currentIndex = allChannels.findIndex(c => c._id === args.channelId);
 
     const targetIndex = args.direction === "up"
       ? currentIndex - 1
       : currentIndex + 1;
 
-    if (targetIndex < 0 || targetIndex >= sorted.length) {
+    if (targetIndex < 0 || targetIndex >= allChannels.length) {
       return; // Am Rand, nichts tun
     }
 
-    const targetChannel = sorted[targetIndex];
+    const targetChannel = allChannels[targetIndex];
 
     // Inhalte tauschen (nicht die Position)
     const { _id: _1, _creationTime: _c1, projectId: _p1, order: _, ...currentData } = channel;

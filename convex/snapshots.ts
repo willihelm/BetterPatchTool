@@ -20,11 +20,11 @@ type ProjectSnapshotPayload = {
 export const list = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
-    const snapshots = await ctx.db
+    return await ctx.db
       .query("projectSnapshots")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .withIndex("by_project_and_createdAt", (q) => q.eq("projectId", args.projectId))
+      .order("desc")
       .collect();
-    return snapshots.sort((a, b) => b.createdAt - a.createdAt);
   },
 });
 

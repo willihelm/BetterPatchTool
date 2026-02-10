@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useCallback, useRef, useState, createContext, useContext } from "react";
-import DataGrid, { type Column, type RenderCellProps, textEditor, type CellSelectArgs } from "react-data-grid";
+import DataGrid, { type Column, type RenderCellProps, textEditor } from "react-data-grid";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
@@ -381,7 +381,6 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
   const clearAllPatched = useMutation(api.inputChannels.clearAllPatched);
 
   const [autoPatchDialogOpen, setAutoPatchDialogOpen] = useState(false);
-  const [selectedCell, setSelectedCell] = useState<{ rowIdx: number; idx: number } | null>(null);
   const [openPortDropdownRowId, setOpenPortDropdownRowId] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -668,17 +667,20 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- openPortDropdownRowId excluded to prevent column recreation
 ], [rows, selection, isStereoAvailable, projectId, clearAllPatched, moveChannel, removeChannel, togglePatched, handleToggleStereo, patchChannel]);
 
+  const columnIndexByKey = useMemo(() => {
+    const indexByKey = new Map<string, number>();
+    columns.forEach((column, index) => {
+      indexByKey.set(column.key, index);
+    });
+    return indexByKey;
+  }, [columns]);
+
   const handleAddChannel = async () => {
     await createChannel({
       projectId,
       source: "",
     });
   };
-
-  // Handle cell selection changes
-  const handleSelectedCellChange = useCallback((args: CellSelectArgs<ChannelRow>) => {
-    setSelectedCell({ rowIdx: args.rowIdx, idx: args.column.idx });
-  }, []);
 
   // Custom key handlers for Alt+Arrow (move rows) and Alt+Enter (copy+increment)
   const handleCellKeyDown = useCallback((args: { row: ChannelRow; rowIdx: number; column: Column<ChannelRow>; mode: "SELECT" | "EDIT" }, event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -725,7 +727,8 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
           const valueStr = typeof aboveValue === "string" ? aboveValue : "";
           const newValue = incrementTrailingNumber(valueStr);
           const nextRowIdx = Math.min(rowIdx + 1, rows.length - 1);
-          const colIdx = column.idx;
+          const colIdx = columnIndexByKey.get(column.key);
+          if (colIdx === undefined) return;
 
           updateChannel({
             channelId: row._id as Id<"inputChannels">,
@@ -780,7 +783,7 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
       });
       return;
     }
-  }, [rows, moveChannel, updateChannel, patchChannel, isStereoAvailable, toggleStereoChannel]);
+  }, [rows, moveChannel, updateChannel, patchChannel, isStereoAvailable, toggleStereoChannel, columnIndexByKey]);
 
   // Row class for stereo and selection
   const rowClass = useCallback((row: ChannelRow) => {
@@ -868,8 +871,6 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
               rowKeyGetter={(row: ChannelRow) => row._id}
               onRowsChange={handleRowsChange}
               onCellKeyDown={handleCellKeyDown}
-              selectedCell={selectedCell}
-              onSelectedCellChange={handleSelectedCellChange}
               rowClass={rowClass}
               rowHeight={rowHeight}
               headerRowHeight={40}

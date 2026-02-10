@@ -5,12 +5,10 @@ import { mutation, query } from "./_generated/server";
 export const list = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
-    const channels = await ctx.db
+    return await ctx.db
       .query("inputChannels")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
       .collect();
-
-    return channels.sort((a, b) => a.order - b.order);
   },
 });
 
@@ -46,7 +44,7 @@ export const create = mutation({
     // Höchste Order ermitteln
     const channels = await ctx.db
       .query("inputChannels")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
       .collect();
 
     const maxOrder = channels.length > 0
@@ -135,7 +133,7 @@ export const insertMany = mutation({
     // Bestehende Kanäle nach unten verschieben
     const existingChannels = await ctx.db
       .query("inputChannels")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
       .collect();
 
     const channelsToShift = existingChannels.filter(c => c.order > args.afterOrder);
@@ -205,7 +203,7 @@ export const generateChannelsUpTo = mutation({
   handler: async (ctx, args) => {
     const existingChannels = await ctx.db
       .query("inputChannels")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
       .collect();
 
     const currentCount = existingChannels.length;
@@ -268,7 +266,7 @@ export const clearAllPatched = mutation({
   handler: async (ctx, args) => {
     const channels = await ctx.db
       .query("inputChannels")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
       .collect();
 
     const patchedChannels = channels.filter((c) => c.patched);
@@ -293,21 +291,19 @@ export const moveChannel = mutation({
 
     const allChannels = await ctx.db
       .query("inputChannels")
-      .withIndex("by_project", (q) => q.eq("projectId", channel.projectId))
+      .withIndex("by_project_and_order", (q) => q.eq("projectId", channel.projectId))
       .collect();
-
-    const sorted = allChannels.sort((a, b) => a.order - b.order);
-    const currentIndex = sorted.findIndex(c => c._id === args.channelId);
+    const currentIndex = allChannels.findIndex(c => c._id === args.channelId);
 
     const targetIndex = args.direction === "up"
       ? currentIndex - 1
       : currentIndex + 1;
 
-    if (targetIndex < 0 || targetIndex >= sorted.length) {
+    if (targetIndex < 0 || targetIndex >= allChannels.length) {
       return; // Am Rand, nichts tun
     }
 
-    const targetChannel = sorted[targetIndex];
+    const targetChannel = allChannels[targetIndex];
 
     // Inhalte tauschen (nicht die Position)
     const { _id: _1, _creationTime: _c1, projectId: _p1, order: _, channelNumber: __, ...currentData } = channel;
