@@ -16,6 +16,8 @@ interface PortUsageEntry {
   channelId: string;
   channelName: string;
   channelNumber: number;
+  mixerId?: string;
+  mixerName?: string;
 }
 
 type PortUsage = PortUsageEntry[];
@@ -37,11 +39,15 @@ export function isPortUsedByOther(usage: PortUsage | PortUsageEntry | undefined,
   return normalized.some(entry => entry.channelId !== currentChannelId);
 }
 
-// Helper to get the first channel name from port usage (for display when port is taken)
-export function getPortUsageDisplayName(usage: PortUsage | PortUsageEntry | undefined): string {
+// Helper to get display text for port usage (includes mixer name if from a different mixer)
+export function getPortUsageDisplayName(usage: PortUsage | PortUsageEntry | undefined, currentMixerId?: string): string {
   const normalized = normalizeUsage(usage);
   if (normalized.length === 0) return "";
-  return normalized[0].channelName;
+  const entry = normalized[0];
+  if (currentMixerId && entry.mixerId && entry.mixerId !== currentMixerId) {
+    return `${entry.channelName} (${entry.mixerName})`;
+  }
+  return entry.channelName;
 }
 
 export interface PortGroup {

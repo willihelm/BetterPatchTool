@@ -49,8 +49,9 @@ export function MixerSettingsDialog({
   const [outputChannelCount, setOutputChannelCount] = useState("0");
   const [isLoading, setIsLoading] = useState(false);
 
-  const inputChannels = useQuery(api.inputChannels.list, { projectId });
-  const outputChannels = useQuery(api.outputChannels.list, { projectId });
+  const mixerId = mixer._id as Id<"mixers">;
+  const inputChannels = useQuery(api.inputChannels.list, { projectId, mixerId });
+  const outputChannels = useQuery(api.outputChannels.list, { projectId, mixerId });
 
   const currentInputChannelCount = inputChannels?.length ?? 0;
   const currentOutputChannelCount = outputChannels?.length ?? 0;
@@ -89,6 +90,7 @@ export function MixerSettingsDialog({
       if (newInputCount > currentInputChannelCount) {
         await generateInputChannels({
           projectId,
+          mixerId,
           targetCount: newInputCount,
         });
       }
@@ -97,6 +99,7 @@ export function MixerSettingsDialog({
       if (newOutputCount > currentOutputChannelCount) {
         await generateOutputChannels({
           projectId,
+          mixerId,
           targetCount: newOutputCount,
         });
       }

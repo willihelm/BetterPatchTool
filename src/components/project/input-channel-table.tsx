@@ -27,12 +27,13 @@ import { useUndoRedo } from "@/hooks/use-undo-redo";
 
 interface InputChannelTableProps {
   projectId: Id<"projects">;
+  mixerId?: Id<"mixers"> | null;
   channelType?: "input" | "output";
   onChannelTypeChange?: (type: "input" | "output") => void;
 }
 
-export function InputChannelTable({ projectId, channelType, onChannelTypeChange }: InputChannelTableProps) {
-  const channels = useQuery(api.inputChannels.list, { projectId });
+export function InputChannelTable({ projectId, mixerId, channelType, onChannelTypeChange }: InputChannelTableProps) {
+  const channels = useQuery(api.inputChannels.list, { projectId, mixerId: mixerId ?? undefined });
   const mixers = useQuery(api.mixers.list, { projectId });
 
   const createChannel = useMutation(api.inputChannels.create);
@@ -50,9 +51,9 @@ export function InputChannelTable({ projectId, channelType, onChannelTypeChange 
   const gridRef = useRef<HTMLDivElement>(null);
   const rowsRef = useRef<InputChannelRow[]>([]);
 
-  // Get stereo mode from first mixer
-  const firstMixer = mixers?.[0];
-  const isStereoAvailable = firstMixer?.stereoMode === "true_stereo";
+  // Get stereo mode from active mixer
+  const activeMixer = mixerId ? mixers?.find(m => m._id === mixerId) : mixers?.[0];
+  const isStereoAvailable = activeMixer?.stereoMode === "true_stereo";
 
   // Multi-select for auto-patching
   const channelIds = channels?.map((c) => c._id) ?? [];
@@ -305,7 +306,7 @@ export function InputChannelTable({ projectId, channelType, onChannelTypeChange 
             <span>Patched</span>
             {patchedCount > 0 && (
               <button
-                onClick={() => clearAllPatched({ projectId })}
+                onClick={() => clearAllPatched({ projectId, mixerId: mixerId ?? undefined })}
                 className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground"
                 title={`Clear all ${patchedCount} patched checkbox${patchedCount !== 1 ? "es" : ""}`}
               >
@@ -386,6 +387,7 @@ export function InputChannelTable({ projectId, channelType, onChannelTypeChange 
     await createChannel({
       projectId,
       source: "",
+      mixerId: mixerId ?? undefined,
     });
   };
 

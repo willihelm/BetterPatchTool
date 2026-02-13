@@ -21,6 +21,9 @@ import { Input } from "@/components/ui/input";
 import { ClearPatchesDialog } from "./clear-patches-dialog";
 import { ClearDevicePatchesDialog } from "./clear-device-patches-dialog";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
+import { useActiveMixer } from "./active-mixer-context";
+import { useOutputPatchWithConflict, OutputPatchConflictDialog } from "./output-patch-conflict-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 interface PatchMatrixProps {
   projectId: Id<"projects">;
@@ -46,27 +49,30 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   const deviceLabelRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const deviceHeaderRefs = useRef<Map<string, HTMLTableCellElement>>(new Map());
 
-  // Queries
-  const inputChannels = useQuery(api.inputChannels.list, { projectId });
-  const outputChannels = useQuery(api.outputChannels.list, { projectId });
-  const mixers = useQuery(api.mixers.list, { projectId });
+  // Active mixer
+  const { activeMixerId, activeMixer } = useActiveMixer();
 
-  // Check if stereo mode is available (first mixer has true_stereo)
-  const isStereoAvailable = mixers?.[0]?.stereoMode === "true_stereo";
+  // Queries scoped to active mixer
+  const inputChannels = useQuery(api.inputChannels.list, { projectId, mixerId: activeMixerId ?? undefined });
+  const outputChannels = useQuery(api.outputChannels.list, { projectId, mixerId: activeMixerId ?? undefined });
+
+  // Check if stereo mode is available
+  const isStereoAvailable = activeMixer?.stereoMode === "true_stereo";
 
   // Get port groups from context instead of separate query
-  const { inputPortGroups, outputPortGroups, isLoading: portDataLoading } = usePortData();
+  const { inputPortGroups, outputPortGroups, portUsageMap, isLoading: portDataLoading } = usePortData();
   const portGroups = channelType === "input" ? inputPortGroups : outputPortGroups;
 
   // Mutations
   const patchInputChannel = useMutation(api.patching.patchInputChannel);
-  const patchOutputChannel = useMutation(api.patching.patchOutputChannel);
+  const patchOutputChannelDirect = useMutation(api.patching.patchOutputChannel);
   const batchPatchChannels = useMutation(api.patching.batchPatchChannels);
   const toggleInputStereo = useMutation(api.inputChannels.toggleStereo);
   const toggleOutputStereo = useMutation(api.outputChannels.toggleStereo);
   const updateInputChannel = useMutation(api.inputChannels.update);
   const updateOutputChannel = useMutation(api.outputChannels.update);
   const clearPatches = useMutation(api.patching.clearPatches);
+  const { patchWithConflictCheck, conflict, confirmForce, cancelConflict } = useOutputPatchWithConflict();
 
   const { pushAction } = useUndoRedo();
 
@@ -266,40 +272,61 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
 
       // Normal click behavior - handle stereo side
       const channel = rawChannels?.find((c) => c._id === channelId);
-      const patchFn = channelType === "input" ? patchInputChannel : patchOutputChannel;
 
-      if (stereoSide === "right") {
-        const oldPortIdRight = (channel?.ioPortIdRight as Id<"ioPorts">) ?? null;
-        const leftPortId = (channel?.ioPortId as Id<"ioPorts">) ?? null;
-        const newPortIdRight = isAssigned ? null : (portId as Id<"ioPorts">);
-        await patchFn({
-          channelId: channelId as Id<"inputChannels"> & Id<"outputChannels">,
-          ioPortId: leftPortId,
-          ioPortIdRight: newPortIdRight,
-        });
-        pushAction({
-          label: "Toggle patch",
-          undo: async () => { await patchFn({ channelId: channelId as Id<"inputChannels"> & Id<"outputChannels">, ioPortId: leftPortId, ioPortIdRight: oldPortIdRight }); },
-          redo: async () => { await patchFn({ channelId: channelId as Id<"inputChannels"> & Id<"outputChannels">, ioPortId: leftPortId, ioPortIdRight: newPortIdRight }); },
-        });
+      if (channelType === "input") {
+        // Input channels: no cross-mixer conflict
+        if (stereoSide === "right") {
+          const oldPortIdRight = (channel?.ioPortIdRight as Id<"ioPorts">) ?? null;
+          const leftPortId = (channel?.ioPortId as Id<"ioPorts">) ?? null;
+          const newPortIdRight = isAssigned ? null : (portId as Id<"ioPorts">);
+          await patchInputChannel({ channelId: channelId as Id<"inputChannels">, ioPortId: leftPortId, ioPortIdRight: newPortIdRight });
+          pushAction({
+            label: "Toggle patch",
+            undo: async () => { await patchInputChannel({ channelId: channelId as Id<"inputChannels">, ioPortId: leftPortId, ioPortIdRight: oldPortIdRight }); },
+            redo: async () => { await patchInputChannel({ channelId: channelId as Id<"inputChannels">, ioPortId: leftPortId, ioPortIdRight: newPortIdRight }); },
+          });
+        } else {
+          const oldPortId = (channel?.ioPortId as Id<"ioPorts">) ?? null;
+          const newPortId = isAssigned ? null : (portId as Id<"ioPorts">);
+          const rightPortId = stereoSide === "left" ? ((channel?.ioPortIdRight as Id<"ioPorts">) ?? null) : undefined;
+          await patchInputChannel({ channelId: channelId as Id<"inputChannels">, ioPortId: newPortId, ioPortIdRight: rightPortId });
+          pushAction({
+            label: "Toggle patch",
+            undo: async () => { await patchInputChannel({ channelId: channelId as Id<"inputChannels">, ioPortId: oldPortId, ioPortIdRight: rightPortId }); },
+            redo: async () => { await patchInputChannel({ channelId: channelId as Id<"inputChannels">, ioPortId: newPortId, ioPortIdRight: rightPortId }); },
+          });
+        }
       } else {
-        // Left or mono
-        const oldPortId = (channel?.ioPortId as Id<"ioPorts">) ?? null;
-        const newPortId = isAssigned ? null : (portId as Id<"ioPorts">);
-        const rightPortId = stereoSide === "left" ? ((channel?.ioPortIdRight as Id<"ioPorts">) ?? null) : undefined;
-        await patchFn({
-          channelId: channelId as Id<"inputChannels"> & Id<"outputChannels">,
-          ioPortId: newPortId,
-          ioPortIdRight: rightPortId,
-        });
-        pushAction({
-          label: "Toggle patch",
-          undo: async () => { await patchFn({ channelId: channelId as Id<"inputChannels"> & Id<"outputChannels">, ioPortId: oldPortId, ioPortIdRight: rightPortId }); },
-          redo: async () => { await patchFn({ channelId: channelId as Id<"inputChannels"> & Id<"outputChannels">, ioPortId: newPortId, ioPortIdRight: rightPortId }); },
-        });
+        // Output channels: check for cross-mixer conflicts
+        const id = channelId as Id<"outputChannels">;
+        if (stereoSide === "right") {
+          const oldPortIdRight = (channel?.ioPortIdRight as Id<"ioPorts">) ?? null;
+          const leftPortId = (channel?.ioPortId as Id<"ioPorts">) ?? null;
+          const newPortIdRight = isAssigned ? null : (portId as Id<"ioPorts">);
+          await patchWithConflictCheck({
+            channelId: id, ioPortId: leftPortId, ioPortIdRight: newPortIdRight,
+            onSuccess: () => pushAction({
+              label: "Toggle patch",
+              undo: async () => { await patchOutputChannelDirect({ channelId: id, ioPortId: leftPortId, ioPortIdRight: oldPortIdRight, force: true }); },
+              redo: async () => { await patchOutputChannelDirect({ channelId: id, ioPortId: leftPortId, ioPortIdRight: newPortIdRight, force: true }); },
+            }),
+          });
+        } else {
+          const oldPortId = (channel?.ioPortId as Id<"ioPorts">) ?? null;
+          const newPortId = isAssigned ? null : (portId as Id<"ioPorts">);
+          const rightPortId = stereoSide === "left" ? ((channel?.ioPortIdRight as Id<"ioPorts">) ?? null) : undefined;
+          await patchWithConflictCheck({
+            channelId: id, ioPortId: newPortId, ioPortIdRight: rightPortId,
+            onSuccess: () => pushAction({
+              label: "Toggle patch",
+              undo: async () => { await patchOutputChannelDirect({ channelId: id, ioPortId: oldPortId, ioPortIdRight: rightPortId, force: true }); },
+              redo: async () => { await patchOutputChannelDirect({ channelId: id, ioPortId: newPortId, ioPortIdRight: rightPortId, force: true }); },
+            }),
+          });
+        }
       }
     },
-    [channelType, patchInputChannel, patchOutputChannel, batchPatchChannels, channels, rawChannels, visiblePorts, diagonalAnchor, isValidDiagonal, getDiagonalCells, pushAction]
+    [channelType, patchInputChannel, patchOutputChannelDirect, patchWithConflictCheck, batchPatchChannels, channels, rawChannels, visiblePorts, diagonalAnchor, isValidDiagonal, getDiagonalCells, pushAction]
   );
 
   const handleKeyDown = useCallback(
@@ -374,14 +401,14 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           undo: async () => {
             await toggleOutputStereo({ channelId: id });
             if (oldIsStereo && oldPortIdRight) {
-              await patchOutputChannel({ channelId: id, ioPortId: oldPortId ?? null, ioPortIdRight: oldPortIdRight });
+              await patchOutputChannelDirect({ channelId: id, ioPortId: oldPortId ?? null, ioPortIdRight: oldPortIdRight, force: true });
             }
           },
           redo: async () => { await toggleOutputStereo({ channelId: id }); },
         });
       }
     },
-    [channelType, toggleInputStereo, toggleOutputStereo, pushAction, rawChannels, patchInputChannel, patchOutputChannel]
+    [channelType, toggleInputStereo, toggleOutputStereo, pushAction, rawChannels, patchInputChannel, patchOutputChannelDirect]
   );
 
   // Handle saving channel name
@@ -757,7 +784,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           No devices selected. Use the Devices filter to select which devices to show.
         </div>
       ) : (
-        <>
+        <TooltipProvider delayDuration={200}>
           <div
             ref={containerRef}
             className="border rounded-lg overflow-auto focus:outline-none max-h-[calc(100vh-300px)] select-none"
@@ -962,6 +989,15 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                     const isUsedByOther =
                       otherChannelId && otherChannelId !== orig._id;
 
+                    // Cross-mixer detection: check if port is used by a channel on a different mixer
+                    const portUsage = portUsageMap[port._id];
+                    const crossMixerEntry = activeMixerId && portUsage && channelType === "output"
+                      ? (Array.isArray(portUsage) ? portUsage : [portUsage]).find(
+                          (entry) => entry.mixerId && entry.mixerId !== activeMixerId && entry.channelType === "output"
+                        )
+                      : undefined;
+                    const isUsedByCrossMixer = !!crossMixerEntry;
+
                     // Check if this is the first port of a device group for border
                     const isFirstOfDevice =
                       colIndex === 0 ||
@@ -976,6 +1012,11 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                     // Diagonal anchor and preview highlighting
                     const isAnchor = diagonalAnchor?.row === rowIndex && diagonalAnchor?.col === colIndex;
                     const isInDiagonalPreview = diagonalPreviewCells.has(`${rowIndex}-${colIndex}`);
+
+                    // Tooltip for cross-mixer usage
+                    const crossMixerTitle = crossMixerEntry
+                      ? `Used by Ch ${crossMixerEntry.channelNumber} on ${crossMixerEntry.mixerName}`
+                      : undefined;
 
                     return (
                       <td
@@ -995,6 +1036,8 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                               ? "bg-muted/40"
                               : isAssigned
                               ? "bg-primary/20"
+                              : isUsedByCrossMixer
+                              ? "bg-orange-100/40 dark:bg-orange-900/20"
                               : isUsedByOther
                               ? "bg-muted/30"
                               : "hover:bg-muted/50"
@@ -1007,17 +1050,30 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                         onMouseEnter={() => setHoveredCell({ row: rowIndex, col: colIndex })}
                         onMouseLeave={() => setHoveredCell(null)}
                       >
-                        <div className="w-full h-8 flex items-center justify-center">
-                          {isAssigned && (
-                            <Check
-                              className="h-4 w-4"
-                              style={{ color: port.device.color }}
-                            />
-                          )}
-                          {isUsedByOther && !isAssigned && (
-                            <span className="text-xs text-muted-foreground">·</span>
-                          )}
-                        </div>
+                        {isUsedByCrossMixer && !isAssigned ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="w-full h-8 flex items-center justify-center">
+                                <span className="text-xs font-bold text-orange-500 dark:text-orange-400">×</span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              {crossMixerTitle}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <div className="w-full h-8 flex items-center justify-center">
+                            {isAssigned && (
+                              <Check
+                                className="h-4 w-4"
+                                style={{ color: port.device.color }}
+                              />
+                            )}
+                            {isUsedByOther && !isAssigned && (
+                              <span className="text-xs text-muted-foreground">·</span>
+                            )}
+                          </div>
+                        )}
                       </td>
                     );
                   })}
@@ -1043,6 +1099,12 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
               <span>Used by another channel</span>
             </div>
             <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-orange-100/40 dark:bg-orange-900/20 border rounded flex items-center justify-center">
+                <span className="text-[10px] font-bold text-orange-500 dark:text-orange-400">×</span>
+              </div>
+              <span>Used by another mixer</span>
+            </div>
+            <div className="flex items-center gap-2">
               <div className="w-4 h-4 border rounded" />
               <span>Available</span>
             </div>
@@ -1053,7 +1115,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
               <span>Click to toggle Mono/Stereo</span>
             </div>
           </div>
-        </>
+        </TooltipProvider>
       )}
 
       {/* Clear patches dialogs */}
@@ -1080,6 +1142,12 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           />
         ) : null;
       })()}
+
+      <OutputPatchConflictDialog
+        conflict={conflict}
+        onConfirm={confirmForce}
+        onCancel={cancelConflict}
+      />
     </div>
   );
 }

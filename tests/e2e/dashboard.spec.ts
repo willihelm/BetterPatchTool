@@ -4,9 +4,9 @@ test.describe("Dashboard", () => {
   test("should display the dashboard page", async ({ page }) => {
     await page.goto("/dashboard");
 
-    // Check that the header is visible
-    await expect(page.getByRole("heading", { name: "BetterPatchTool" })).toBeVisible();
-    await expect(page.getByText("Dashboard")).toBeVisible();
+    // Check that the header logo is visible
+    await expect(page.getByAltText("BetterPatchTool").first()).toBeVisible();
+    await expect(page.getByText("My Projects")).toBeVisible();
   });
 
   test("should have a New Project button", async ({ page }) => {

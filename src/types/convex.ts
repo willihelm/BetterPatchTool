@@ -21,6 +21,7 @@ export interface Mixer {
   stereoMode: "linked_mono" | "true_stereo";
   channelCount: number;
   designation: string;
+  order?: number;
 }
 
 export interface IODevice {

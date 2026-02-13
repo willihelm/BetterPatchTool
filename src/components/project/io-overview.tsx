@@ -29,10 +29,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Box, ArrowRight, ArrowLeft, Eye, Grid3X3, List, Headphones, GripVertical } from "lucide-react";
+import { Plus, Trash2, Box, ArrowRight, ArrowLeft, Eye, Grid3X3, List, Headphones, GripVertical, Settings } from "lucide-react";
 import Link from "next/link";
-import type { IODevice } from "@/types/convex";
+import type { IODevice, Mixer } from "@/types/convex";
 import { IODeviceEditDialog } from "./io-device-edit-dialog";
+import { MixerSettingsDialog } from "./mixer-settings-dialog";
 import {
   DndContext,
   closestCenter,
@@ -163,13 +164,112 @@ function SortableIODeviceCard({ ioDevice, projectId, onRemove }: SortableIODevic
   );
 }
 
+interface SortableMixerCardProps {
+  mixer: Mixer;
+  canDelete: boolean;
+  onEdit: () => void;
+  onRemove: () => void;
+}
+
+function SortableMixerCard({ mixer, canDelete, onEdit, onRemove }: SortableMixerCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: mixer._id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <Card ref={setNodeRef} style={style} className={isDragging ? "z-50" : ""}>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing touch-none p-1 -ml-1 hover:bg-muted rounded"
+              title="Drag to reorder"
+            >
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
+            </button>
+            <Badge variant="secondary" className="font-mono font-bold">
+              {mixer.designation}
+            </Badge>
+            <CardTitle className="text-base">{mixer.name}</CardTitle>
+          </div>
+          {mixer.type && (
+            <Badge variant="outline" className="text-xs">{mixer.type}</Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-3 text-sm text-muted-foreground mb-4">
+          <span>{mixer.channelCount} ch</span>
+          <span>·</span>
+          <span>{mixer.stereoMode === "true_stereo" ? "True Stereo" : "Linked Mono"}</span>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={onEdit}
+            title="Settings"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="destructive"
+            size="icon"
+            onClick={onRemove}
+            disabled={!canDelete}
+            title={canDelete ? "Remove" : "Cannot delete last mixer"}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Next designation letter based on existing mixers
+function getNextDesignation(mixers: Mixer[]): string {
+  const used = new Set(mixers.map(m => m.designation));
+  for (let i = 0; i < 26; i++) {
+    const letter = String.fromCharCode(65 + i);
+    if (!used.has(letter)) return letter;
+  }
+  return String.fromCharCode(65 + mixers.length);
+}
+
 export function IOOverview({ projectId }: IOOverviewProps) {
   const ioDevices = useQuery(api.ioDevices.list, { projectId });
+  const mixers = useQuery(api.mixers.list, { projectId }) as Mixer[] | undefined;
   const createIODevice = useMutation(api.ioDevices.create);
   const removeIODevice = useMutation(api.ioDevices.remove);
   const reorderDevices = useMutation(api.ioDevices.reorderDevices);
+  const createMixer = useMutation(api.mixers.create);
+  const removeMixer = useMutation(api.mixers.remove);
+  const reorderMixers = useMutation(api.mixers.reorderMixers);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isMixerDialogOpen, setIsMixerDialogOpen] = useState(false);
+  const [mixerSettingsTarget, setMixerSettingsTarget] = useState<Mixer | null>(null);
+  const [newMixer, setNewMixer] = useState({
+    name: "",
+    type: "",
+    stereoMode: "linked_mono" as "linked_mono" | "true_stereo",
+    channelCount: 48,
+    outputChannelCount: 24,
+  });
   const [newIODevice, setNewIODevice] = useState({
     name: "",
     shortName: "",
@@ -207,6 +307,54 @@ export function IOOverview({ projectId }: IOOverviewProps) {
           deviceIds: reordered.map((d) => d._id) as Id<"ioDevices">[],
         });
       }
+    }
+  };
+
+  const handleMixerDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id && mixers) {
+      const oldIndex = mixers.findIndex((m) => m._id === active.id);
+      const newIndex = mixers.findIndex((m) => m._id === over.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const reordered = arrayMove(mixers, oldIndex, newIndex);
+        reorderMixers({
+          mixerIds: reordered.map((m) => m._id) as Id<"mixers">[],
+        });
+      }
+    }
+  };
+
+  const handleCreateMixer = async () => {
+    if (!newMixer.name || !mixers) return;
+
+    await createMixer({
+      projectId,
+      name: newMixer.name,
+      type: newMixer.type || undefined,
+      stereoMode: newMixer.stereoMode,
+      channelCount: newMixer.channelCount,
+      outputChannelCount: newMixer.outputChannelCount,
+      designation: getNextDesignation(mixers),
+    });
+
+    setNewMixer({
+      name: "",
+      type: "",
+      stereoMode: "linked_mono",
+      channelCount: 48,
+      outputChannelCount: 24,
+    });
+    setIsMixerDialogOpen(false);
+  };
+
+  const handleRemoveMixer = async (mixerId: string) => {
+    try {
+      await removeMixer({ mixerId: mixerId as Id<"mixers"> });
+    } catch (error) {
+      // Will throw if last mixer - could show toast
+      console.error("Cannot delete mixer:", error);
     }
   };
 
@@ -251,7 +399,135 @@ export function IOOverview({ projectId }: IOOverviewProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
+      {/* Mixers Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-medium">
+            Mixers ({mixers?.length ?? 0})
+          </h3>
+          <Dialog open={isMixerDialogOpen} onOpenChange={setIsMixerDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Mixer
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>New Mixer</DialogTitle>
+                <DialogDescription>
+                  Add a new mixer to the project. Input and output channels will be auto-generated.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="mixer-name">Name</Label>
+                  <Input
+                    id="mixer-name"
+                    placeholder="e.g. Monitor, FOH, Broadcast"
+                    value={newMixer.name}
+                    onChange={(e) => setNewMixer({ ...newMixer, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mixer-type">Console Type (optional)</Label>
+                  <Input
+                    id="mixer-type"
+                    placeholder="e.g. Yamaha CL5, DiGiCo SD12"
+                    value={newMixer.type}
+                    onChange={(e) => setNewMixer({ ...newMixer, type: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Stereo Mode</Label>
+                  <Select
+                    value={newMixer.stereoMode}
+                    onValueChange={(v) => setNewMixer({ ...newMixer, stereoMode: v as "linked_mono" | "true_stereo" })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="linked_mono">Linked Mono</SelectItem>
+                      <SelectItem value="true_stereo">True Stereo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="mixer-ch-count">Input Channels</Label>
+                    <Input
+                      id="mixer-ch-count"
+                      type="number"
+                      min={1}
+                      max={256}
+                      value={newMixer.channelCount}
+                      onChange={(e) => setNewMixer({ ...newMixer, channelCount: parseInt(e.target.value) || 48 })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mixer-out-count">Output Channels</Label>
+                    <Input
+                      id="mixer-out-count"
+                      type="number"
+                      min={1}
+                      max={256}
+                      value={newMixer.outputChannelCount}
+                      onChange={(e) => setNewMixer({ ...newMixer, outputChannelCount: parseInt(e.target.value) || 24 })}
+                    />
+                  </div>
+                </div>
+                <Button
+                  onClick={handleCreateMixer}
+                  className="w-full"
+                  disabled={!newMixer.name}
+                >
+                  Create Mixer
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {mixers && mixers.length > 0 && (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleMixerDragEnd}
+          >
+            <SortableContext
+              items={mixers.map((m) => m._id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {mixers.map((mixer) => (
+                  <SortableMixerCard
+                    key={mixer._id}
+                    mixer={mixer as Mixer}
+                    canDelete={mixers.length > 1}
+                    onEdit={() => setMixerSettingsTarget(mixer as Mixer)}
+                    onRemove={() => handleRemoveMixer(mixer._id)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        )}
+      </div>
+
+      {/* Mixer Settings Dialog */}
+      {mixerSettingsTarget && (
+        <MixerSettingsDialog
+          projectId={projectId}
+          mixer={mixerSettingsTarget}
+          open={!!mixerSettingsTarget}
+          onOpenChange={(open) => !open && setMixerSettingsTarget(null)}
+        />
+      )}
+
+      {/* IO Devices Section */}
+      <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium">
           IO Devices ({ioDevices.length})
@@ -519,6 +795,7 @@ export function IOOverview({ projectId }: IOOverviewProps) {
           </SortableContext>
         </DndContext>
       )}
+      </div>
     </div>
   );
 }

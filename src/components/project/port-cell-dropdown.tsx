@@ -47,6 +47,7 @@ interface PortCellDropdownProps {
   row: PortCellDropdownRow;
   onSelect: (portId: string | null, portIdRight?: string | null) => void;
   portType: "input" | "output";
+  activeMixerId?: string;
 }
 
 // Generate port pairs for stereo (consecutive ports)
@@ -66,7 +67,7 @@ function getPortPairs(ports: PortGroup["ports"]) {
   return pairs;
 }
 
-export function PortCellDropdown({ row, onSelect, portType }: PortCellDropdownProps) {
+export function PortCellDropdown({ row, onSelect, portType, activeMixerId }: PortCellDropdownProps) {
   const dropdownContext = useContext(PortDropdownContext);
   const isOpen = dropdownContext?.openRowId === row._id;
 
@@ -255,9 +256,9 @@ export function PortCellDropdown({ row, onSelect, portType }: PortCellDropdownPr
                           <span className="font-mono">{pair.label}</span>
                           {isUsedByOther && (
                             <span className="text-xs text-muted-foreground truncate max-w-24">
-                              {isLeftUsedByOther && getPortUsageDisplayName(leftUsage)}
+                              {isLeftUsedByOther && getPortUsageDisplayName(leftUsage, activeMixerId)}
                               {isLeftUsedByOther && isRightUsedByOther && " / "}
-                              {isRightUsedByOther && getPortUsageDisplayName(rightUsage)}
+                              {isRightUsedByOther && getPortUsageDisplayName(rightUsage, activeMixerId)}
                             </span>
                           )}
                         </DropdownMenuItem>
@@ -322,7 +323,7 @@ export function PortCellDropdown({ row, onSelect, portType }: PortCellDropdownPr
                   const usage = portUsageMap[port._id];
                   const isUsedByOther = isPortUsedByOther(usage, row._id);
                   const isCurrentPort = port._id === row.ioPortId;
-                  const usageDisplayName = getPortUsageDisplayName(usage);
+                  const usageDisplayName = getPortUsageDisplayName(usage, activeMixerId);
                   return (
                     <DropdownMenuItem
                       key={port._id}

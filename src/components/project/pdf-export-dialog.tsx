@@ -28,6 +28,7 @@ import { PDFDocument } from "./pdf/pdf-document";
 import { defaultPDFExportOptions, type PDFExportOptions } from "@/types/pdf-export";
 import type { Project, Mixer, InputChannel, OutputChannel } from "@/types/convex";
 import { usePortData } from "./port-data-context";
+import { useActiveMixer } from "./active-mixer-context";
 
 interface PDFExportDialogProps {
   open: boolean;
@@ -44,8 +45,13 @@ export function PDFExportDialog({
   mixers,
   projectId,
 }: PDFExportDialogProps) {
-  const inputChannels = useQuery(api.inputChannels.list, { projectId }) ?? [];
-  const outputChannels = useQuery(api.outputChannels.list, { projectId }) ?? [];
+  const { activeMixerId, activeMixer } = useActiveMixer();
+  const [selectedMixerId, setSelectedMixerId] = useState<string>("");
+
+  // Use selected mixer or fall back to active mixer
+  const exportMixerId = (selectedMixerId || activeMixerId || undefined) as Id<"mixers"> | undefined;
+  const inputChannels = useQuery(api.inputChannels.list, { projectId, mixerId: exportMixerId }) ?? [];
+  const outputChannels = useQuery(api.outputChannels.list, { projectId, mixerId: exportMixerId }) ?? [];
   const [options, setOptions] = useState<PDFExportOptions>(defaultPDFExportOptions);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -56,7 +62,9 @@ export function PDFExportDialog({
   // Get port data from context
   const { portInfoMap, portUsageMap } = usePortData();
 
-  const currentMixer = mixers?.[0];
+  const currentMixer = exportMixerId
+    ? (mixers.find(m => m._id === exportMixerId) ?? activeMixer)
+    : activeMixer;
 
   const updateOption = useCallback(<K extends keyof PDFExportOptions>(
     key: K,
@@ -128,7 +136,7 @@ export function PDFExportDialog({
       const doc = (
         <PDFDocument
           project={project}
-          mixer={currentMixer}
+          mixer={currentMixer ?? undefined}
           inputChannels={inputChannels}
           outputChannels={outputChannels}
           devicesWithPorts={devicesWithPorts}
@@ -178,6 +186,28 @@ export function PDFExportDialog({
         </DialogHeader>
 
         <div className="grid gap-6 py-4">
+          {/* Mixer Selection */}
+          {mixers.length > 1 && (
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold">Mixer</Label>
+              <Select
+                value={selectedMixerId || (activeMixerId ?? "")}
+                onValueChange={setSelectedMixerId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select mixer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {mixers.map((mixer) => (
+                    <SelectItem key={mixer._id} value={mixer._id}>
+                      {mixer.designation} - {mixer.name} ({mixer.channelCount}ch)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Content Selection */}
           <div className="space-y-3">
             <Label className="text-sm font-semibold">Content</Label>

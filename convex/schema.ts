@@ -31,7 +31,10 @@ export default defineSchema({
     stereoMode: v.union(v.literal("linked_mono"), v.literal("true_stereo")),
     channelCount: v.number(),
     designation: v.string(), // A, B, C
-  }).index("by_project", ["projectId"]),
+    order: v.optional(v.number()), // Display order
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_and_order", ["projectId", "order"]),
 
   // IO Devices (stageboxes, computers, etc.)
   ioDevices: defineTable({
@@ -102,6 +105,8 @@ export default defineSchema({
   })
     .index("by_project", ["projectId"])
     .index("by_project_and_order", ["projectId", "order"])
+    .index("by_mixer", ["mixerId"])
+    .index("by_mixer_and_order", ["mixerId", "order"])
     .index("by_group", ["groupId"])
     .index("by_ioPort", ["ioPortId"])
     .index("by_ioPortRight", ["ioPortIdRight"]),
@@ -125,6 +130,8 @@ export default defineSchema({
   })
     .index("by_project", ["projectId"])
     .index("by_project_and_order", ["projectId", "order"])
+    .index("by_mixer", ["mixerId"])
+    .index("by_mixer_and_order", ["mixerId", "order"])
     .index("by_ioPort", ["ioPortId"])
     .index("by_ioPortRight", ["ioPortIdRight"]),
 

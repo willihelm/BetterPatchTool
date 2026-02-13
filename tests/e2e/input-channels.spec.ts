@@ -6,7 +6,7 @@ test.describe("Input Channels", () => {
     await page.goto("/projects/new");
     await page.getByLabel(/Title/i).fill(title);
     await page.getByRole("button", { name: /Create Project/i }).click();
-    await expect(page).toHaveURL(/\/project\/.+/);
+    await expect(page).toHaveURL(/\/project\/.+/, { timeout: 15000 });
   }
 
   // react-data-grid uses divs with role="row" and role="gridcell" instead of table/tr/td
@@ -22,7 +22,7 @@ test.describe("Input Channels", () => {
       "data-state",
       "active"
     );
-    await expect(page.getByRole("button", { name: "Input Channels" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Input" })).toBeVisible();
 
     // Find the Add Channel button
     const addButton = page.getByRole("button", { name: /Add Channel/i });

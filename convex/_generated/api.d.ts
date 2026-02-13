@@ -12,6 +12,7 @@ import type * as blockPresets from "../blockPresets.js";
 import type * as groups from "../groups.js";
 import type * as inputChannels from "../inputChannels.js";
 import type * as ioDevices from "../ioDevices.js";
+import type * as migrations from "../migrations.js";
 import type * as mixers from "../mixers.js";
 import type * as outputChannels from "../outputChannels.js";
 import type * as patching from "../patching.js";
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   groups: typeof groups;
   inputChannels: typeof inputChannels;
   ioDevices: typeof ioDevices;
+  migrations: typeof migrations;
   mixers: typeof mixers;
   outputChannels: typeof outputChannels;
   patching: typeof patching;

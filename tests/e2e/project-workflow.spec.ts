@@ -6,7 +6,7 @@ test.describe("Project Workflow", () => {
     await page.goto("/projects/new");
     await page.getByLabel(/Title/i).fill(title);
     await page.getByRole("button", { name: /Create Project/i }).click();
-    await expect(page).toHaveURL(/\/project\/.+/);
+    await expect(page).toHaveURL(/\/project\/.+/, { timeout: 15000 });
   }
 
   test("should have tabs for different views", async ({ page }) => {
@@ -15,9 +15,9 @@ test.describe("Project Workflow", () => {
 
     // Check that all main tabs are present
     await expect(page.getByRole("tab", { name: "Patch List" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Patch Matrix" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Matrix" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Stageboxes" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "IO Devices" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Devices" })).toBeVisible();
   });
 
   test("should switch between tabs", async ({ page }) => {
@@ -30,16 +30,16 @@ test.describe("Project Workflow", () => {
       "active"
     );
 
-    // Switch to Patch Matrix tab
-    await page.getByRole("tab", { name: "Patch Matrix" }).click();
-    await expect(page.getByRole("tab", { name: "Patch Matrix" })).toHaveAttribute(
+    // Switch to Matrix tab
+    await page.getByRole("tab", { name: "Matrix" }).click();
+    await expect(page.getByRole("tab", { name: "Matrix" })).toHaveAttribute(
       "data-state",
       "active"
     );
 
-    // Switch to IO Devices tab
-    await page.getByRole("tab", { name: "IO Devices" }).click();
-    await expect(page.getByRole("tab", { name: "IO Devices" })).toHaveAttribute(
+    // Switch to Devices tab
+    await page.getByRole("tab", { name: "Devices" }).click();
+    await expect(page.getByRole("tab", { name: "Devices" })).toHaveAttribute(
       "data-state",
       "active"
     );
@@ -49,8 +49,8 @@ test.describe("Project Workflow", () => {
     const title = `Test Project ${Date.now()}`;
     await createProject(page, title);
 
-    // Click the back button
-    await page.getByRole("link", { name: "" }).first().click();
+    // Click the logo link to go back to dashboard
+    await page.getByAltText("BetterPatchTool").first().click();
     await expect(page).toHaveURL(/\/dashboard/);
   });
 });

@@ -46,18 +46,20 @@ export const create = mutation({
     });
 
     // Create default "FOH" mixer
-    await ctx.db.insert("mixers", {
+    const mixerId = await ctx.db.insert("mixers", {
       projectId,
       name: "FOH",
       stereoMode: "linked_mono",
       channelCount: channelCount,
       designation: "A",
+      order: 0,
     });
 
     // Generate initial empty input channels
     for (let i = 0; i < channelCount; i++) {
       await ctx.db.insert("inputChannels", {
         projectId,
+        mixerId,
         order: i + 1,
         channelNumber: i + 1,
         source: "",
@@ -69,6 +71,7 @@ export const create = mutation({
     for (let i = 0; i < outputChannelCount; i++) {
       await ctx.db.insert("outputChannels", {
         projectId,
+        mixerId,
         order: i + 1,
         busName: "",
         destination: "",

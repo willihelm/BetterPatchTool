@@ -1,10 +1,19 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
-// Alle Input-Kanäle eines Projekts abrufen (sortiert)
+// Alle Input-Kanäle eines Projekts/Mixers abrufen (sortiert)
 export const list = query({
-  args: { projectId: v.id("projects") },
+  args: {
+    projectId: v.id("projects"),
+    mixerId: v.optional(v.id("mixers")),
+  },
   handler: async (ctx, args) => {
+    if (args.mixerId) {
+      return await ctx.db
+        .query("inputChannels")
+        .withIndex("by_mixer_and_order", (q) => q.eq("mixerId", args.mixerId))
+        .collect();
+    }
     return await ctx.db
       .query("inputChannels")
       .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
@@ -41,11 +50,16 @@ export const create = mutation({
     groupId: v.optional(v.id("groups")),
   },
   handler: async (ctx, args) => {
-    // Höchste Order ermitteln
-    const channels = await ctx.db
-      .query("inputChannels")
-      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
-      .collect();
+    // Höchste Order ermitteln (scoped to mixer if provided)
+    const channels = args.mixerId
+      ? await ctx.db
+          .query("inputChannels")
+          .withIndex("by_mixer_and_order", (q) => q.eq("mixerId", args.mixerId))
+          .collect()
+      : await ctx.db
+          .query("inputChannels")
+          .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
+          .collect();
 
     const maxOrder = channels.length > 0
       ? Math.max(...channels.map(c => c.order))
@@ -118,6 +132,7 @@ export const remove = mutation({
 export const insertMany = mutation({
   args: {
     projectId: v.id("projects"),
+    mixerId: v.optional(v.id("mixers")),
     afterOrder: v.number(),
     channels: v.array(v.object({
       source: v.string(),
@@ -131,10 +146,15 @@ export const insertMany = mutation({
   },
   handler: async (ctx, args) => {
     // Bestehende Kanäle nach unten verschieben
-    const existingChannels = await ctx.db
-      .query("inputChannels")
-      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
-      .collect();
+    const existingChannels = args.mixerId
+      ? await ctx.db
+          .query("inputChannels")
+          .withIndex("by_mixer_and_order", (q) => q.eq("mixerId", args.mixerId))
+          .collect()
+      : await ctx.db
+          .query("inputChannels")
+          .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
+          .collect();
 
     const channelsToShift = existingChannels.filter(c => c.order > args.afterOrder);
     const shiftAmount = args.channels.length;
@@ -153,6 +173,7 @@ export const insertMany = mutation({
       const channelData = args.channels[i];
       const id = await ctx.db.insert("inputChannels", {
         projectId: args.projectId,
+        mixerId: args.mixerId,
         order: args.afterOrder + i + 1,
         channelNumber: args.afterOrder + i + 1,
         source: channelData.source,
@@ -198,13 +219,19 @@ export const swapOrder = mutation({
 export const generateChannelsUpTo = mutation({
   args: {
     projectId: v.id("projects"),
+    mixerId: v.optional(v.id("mixers")),
     targetCount: v.number(),
   },
   handler: async (ctx, args) => {
-    const existingChannels = await ctx.db
-      .query("inputChannels")
-      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
-      .collect();
+    const existingChannels = args.mixerId
+      ? await ctx.db
+          .query("inputChannels")
+          .withIndex("by_mixer_and_order", (q) => q.eq("mixerId", args.mixerId))
+          .collect()
+      : await ctx.db
+          .query("inputChannels")
+          .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
+          .collect();
 
     const currentCount = existingChannels.length;
 
@@ -227,6 +254,7 @@ export const generateChannelsUpTo = mutation({
     for (let i = 0; i < channelsToAdd; i++) {
       await ctx.db.insert("inputChannels", {
         projectId: args.projectId,
+        mixerId: args.mixerId,
         order: maxOrder + i + 1,
         channelNumber: maxChannelNumber + i + 1,
         source: "",
@@ -262,12 +290,20 @@ export const toggleStereo = mutation({
 
 // Clear all "patched" checkboxes for a project
 export const clearAllPatched = mutation({
-  args: { projectId: v.id("projects") },
+  args: {
+    projectId: v.id("projects"),
+    mixerId: v.optional(v.id("mixers")),
+  },
   handler: async (ctx, args) => {
-    const channels = await ctx.db
-      .query("inputChannels")
-      .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
-      .collect();
+    const channels = args.mixerId
+      ? await ctx.db
+          .query("inputChannels")
+          .withIndex("by_mixer_and_order", (q) => q.eq("mixerId", args.mixerId))
+          .collect()
+      : await ctx.db
+          .query("inputChannels")
+          .withIndex("by_project_and_order", (q) => q.eq("projectId", args.projectId))
+          .collect();
 
     const patchedChannels = channels.filter((c) => c.patched);
 
@@ -289,10 +325,15 @@ export const moveChannel = mutation({
     const channel = await ctx.db.get(args.channelId);
     if (!channel) throw new Error("Channel not found");
 
-    const allChannels = await ctx.db
-      .query("inputChannels")
-      .withIndex("by_project_and_order", (q) => q.eq("projectId", channel.projectId))
-      .collect();
+    const allChannels = channel.mixerId
+      ? await ctx.db
+          .query("inputChannels")
+          .withIndex("by_mixer_and_order", (q) => q.eq("mixerId", channel.mixerId))
+          .collect()
+      : await ctx.db
+          .query("inputChannels")
+          .withIndex("by_project_and_order", (q) => q.eq("projectId", channel.projectId))
+          .collect();
     const currentIndex = allChannels.findIndex(c => c._id === args.channelId);
 
     const targetIndex = args.direction === "up"

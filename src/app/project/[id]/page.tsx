@@ -9,7 +9,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Download, Users, MoreVertical, Sun, Moon, Monitor, Settings } from "lucide-react";
+import { Download, Users, MoreVertical, Sun, Moon, Monitor } from "lucide-react";
 import { useTheme } from "next-themes";
 import { PatchList } from "@/components/project/patch-list";
 import { IOOverview } from "@/components/project/io-overview";
@@ -28,6 +27,8 @@ import { MixerSettingsDialog } from "@/components/project/mixer-settings-dialog"
 import { PatchMatrix } from "@/components/project/patch-matrix";
 import { StageboxOverview } from "@/components/project/stagebox-overview";
 import { PortDataProvider } from "@/components/project/port-data-context";
+import { ActiveMixerProvider, useActiveMixer } from "@/components/project/active-mixer-context";
+import { MixerSelector } from "@/components/project/mixer-selector";
 import { PDFExportDialog } from "@/components/project/pdf-export-dialog";
 import { SnapshotPanel } from "@/components/project/snapshot-panel";
 import { UndoRedoProvider, UndoRedoButtons } from "@/hooks/use-undo-redo";
@@ -36,13 +37,8 @@ import type { Project, Mixer } from "@/types/convex";
 export default function ProjectPage() {
   const params = useParams();
   const projectId = params.id as Id<"projects">;
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
-  const [mixerSettingsOpen, setMixerSettingsOpen] = useState(false);
-  const { theme, setTheme } = useTheme();
 
   const project = useQuery(api.projects.get, { projectId }) as Project | null | undefined;
-  const mixers = useQuery(api.mixers.list, { projectId }) as Mixer[] | undefined;
 
   if (project === undefined) {
     return (
@@ -65,12 +61,36 @@ export default function ProjectPage() {
     );
   }
 
-  const currentMixer = mixers?.[0];
-
   return (
     <PortDataProvider projectId={projectId}>
-      <UndoRedoProvider>
-      <Tabs defaultValue="patch-list">
+      <ActiveMixerProvider projectId={projectId}>
+        <UndoRedoProvider>
+          <ProjectPageContent project={project} projectId={projectId} />
+        </UndoRedoProvider>
+      </ActiveMixerProvider>
+    </PortDataProvider>
+  );
+}
+
+function ProjectPageContent({ project, projectId }: { project: Project; projectId: Id<"projects"> }) {
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const [mixerSettingsOpen, setMixerSettingsOpen] = useState(false);
+  const [settingsMixerId, setSettingsMixerId] = useState<Id<"mixers"> | null>(null);
+  const { theme, setTheme } = useTheme();
+  const { activeMixer, mixers } = useActiveMixer();
+
+  const handleOpenMixerSettings = (mixerId: Id<"mixers">) => {
+    setSettingsMixerId(mixerId);
+    setMixerSettingsOpen(true);
+  };
+
+  const settingsMixer = settingsMixerId
+    ? (mixers.find(m => m._id === settingsMixerId) as Mixer | undefined)
+    : activeMixer;
+
+  return (
+    <Tabs defaultValue="patch-list">
       <div className="min-h-screen bg-background flex flex-col">
         {/* Header */}
         <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
@@ -113,15 +133,11 @@ export default function ProjectPage() {
                 <TabsTrigger value="patch-list">Patch List</TabsTrigger>
                 <TabsTrigger value="matrix">Matrix</TabsTrigger>
                 <TabsTrigger value="stageboxes">Stageboxes</TabsTrigger>
-                <TabsTrigger value="io-devices">IO Devices</TabsTrigger>
+                <TabsTrigger value="io-devices">Devices</TabsTrigger>
               </TabsList>
 
               <div className="flex items-center gap-1 flex-1 justify-end">
-                {currentMixer && (
-                  <Badge variant="outline" className="hidden lg:flex">
-                    {currentMixer.name} ({currentMixer.channelCount}ch)
-                  </Badge>
-                )}
+                <MixerSelector onOpenSettings={handleOpenMixerSettings} />
                 <UndoRedoButtons />
                 <SnapshotPanel
                   projectId={projectId}
@@ -141,12 +157,6 @@ export default function ProjectPage() {
                       <Download className="mr-2 h-4 w-4" />
                       Export PDF
                     </DropdownMenuItem>
-                    {currentMixer && (
-                      <DropdownMenuItem onClick={() => setMixerSettingsOpen(true)}>
-                        <Settings className="mr-2 h-4 w-4" />
-                        Mixer Settings
-                      </DropdownMenuItem>
-                    )}
                     <DropdownMenuItem>
                       <Users className="mr-2 h-4 w-4" />
                       Collaborators
@@ -215,22 +225,20 @@ export default function ProjectPage() {
           open={exportDialogOpen}
           onOpenChange={setExportDialogOpen}
           project={project}
-          mixers={mixers ?? []}
+          mixers={mixers}
           projectId={projectId}
         />
 
         {/* Mixer Settings Dialog */}
-        {currentMixer && (
+        {settingsMixer && (
           <MixerSettingsDialog
             projectId={projectId}
-            mixer={currentMixer}
+            mixer={settingsMixer}
             open={mixerSettingsOpen}
             onOpenChange={setMixerSettingsOpen}
           />
         )}
       </div>
-      </Tabs>
-      </UndoRedoProvider>
-    </PortDataProvider>
+    </Tabs>
   );
 }

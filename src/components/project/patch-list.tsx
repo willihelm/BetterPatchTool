@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Id } from "../../../convex/_generated/dataModel";
 import { InputChannelTable } from "./input-channel-table";
 import { OutputChannelTable } from "./output-channel-table";
+import { useActiveMixer } from "./active-mixer-context";
 
 interface PatchListProps {
   projectId: Id<"projects">;
@@ -11,13 +12,14 @@ interface PatchListProps {
 
 export function PatchList({ projectId }: PatchListProps) {
   const [channelType, setChannelType] = useState<"input" | "output">("input");
+  const { activeMixerId } = useActiveMixer();
 
   return (
     <div>
       {channelType === "input" ? (
-        <InputChannelTable projectId={projectId} channelType={channelType} onChannelTypeChange={setChannelType} />
+        <InputChannelTable projectId={projectId} mixerId={activeMixerId} channelType={channelType} onChannelTypeChange={setChannelType} />
       ) : (
-        <OutputChannelTable projectId={projectId} channelType={channelType} onChannelTypeChange={setChannelType} />
+        <OutputChannelTable projectId={projectId} mixerId={activeMixerId} channelType={channelType} onChannelTypeChange={setChannelType} />
       )}
     </div>
   );

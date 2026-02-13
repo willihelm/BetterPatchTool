@@ -8,7 +8,7 @@ export const getAllPatchingData = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
     // Fetch all data in parallel to minimize latency
-    const [ioDevicesUnsorted, inputChannels, outputChannels] = await Promise.all([
+    const [ioDevicesUnsorted, inputChannels, outputChannels, mixers] = await Promise.all([
       ctx.db
         .query("ioDevices")
         .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -21,7 +21,14 @@ export const getAllPatchingData = query({
         .query("outputChannels")
         .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
         .collect(),
+      ctx.db
+        .query("mixers")
+        .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+        .collect(),
     ]);
+
+    // Build mixer lookup map
+    const mixerMap = new Map(mixers.map(m => [m._id, m]));
 
     // Sort ioDevices by order field
     const ioDevices = ioDevicesUnsorted.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -34,6 +41,7 @@ export const getAllPatchingData = query({
     }
     for (const channel of outputChannels) {
       if (channel.ioPortId) usedPorts.add(channel.ioPortId);
+      if (channel.ioPortIdRight) usedPorts.add(channel.ioPortIdRight);
     }
 
     // Build port usage map - stores array of channels per port
@@ -45,16 +53,21 @@ export const getAllPatchingData = query({
         channelName: string;
         channelNumber: number;
         stereoSide?: "L" | "R";
+        mixerId?: string;
+        mixerName?: string;
       }>
     > = {};
 
     for (const channel of inputChannels) {
       const channelName = channel.source?.trim() || "";
+      const mixer = channel.mixerId ? mixerMap.get(channel.mixerId) : undefined;
       const baseEntry = {
         channelType: "input" as const,
         channelId: channel._id,
         channelName: channelName || `Ch ${channel.channelNumber}`,
         channelNumber: channel.channelNumber,
+        mixerId: channel.mixerId,
+        mixerName: mixer?.name,
       };
 
       if (channel.ioPortId) {
@@ -79,11 +92,14 @@ export const getAllPatchingData = query({
 
     for (const channel of outputChannels) {
       const channelName = channel.busName?.trim() || channel.destination?.trim() || "";
+      const mixer = channel.mixerId ? mixerMap.get(channel.mixerId) : undefined;
       const baseEntry = {
         channelType: "output" as const,
         channelId: channel._id,
         channelName: channelName || `Output ${channel.order}`,
         channelNumber: channel.order,
+        mixerId: channel.mixerId,
+        mixerName: mixer?.name,
       };
 
       if (channel.ioPortId) {
@@ -331,6 +347,7 @@ export const getAvailablePorts = query({
     }
     for (const channel of outputChannels) {
       if (channel.ioPortId) usedPorts.add(channel.ioPortId);
+      if (channel.ioPortIdRight) usedPorts.add(channel.ioPortIdRight);
     }
 
     // Fetch ALL ports for all devices in ONE query, then filter/group in JS
@@ -430,12 +447,13 @@ export const patchInputChannel = mutation({
   },
 });
 
-// Assign port to output channel
+// Assign port to output channel (with cross-mixer exclusivity)
 export const patchOutputChannel = mutation({
   args: {
     channelId: v.id("outputChannels"),
     ioPortId: v.union(v.id("ioPorts"), v.null()),
     ioPortIdRight: v.optional(v.union(v.id("ioPorts"), v.null())),
+    force: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const channel = await ctx.db.get(args.channelId);
@@ -452,6 +470,58 @@ export const patchOutputChannel = mutation({
       const portRight = await ctx.db.get(args.ioPortIdRight);
       if (!portRight) throw new Error("Right port not found");
       if (portRight.type !== "output") throw new Error("Cannot assign input port to output channel");
+    }
+
+    // Check output port exclusivity across all mixers
+    // A port can be used as either ioPortId (left/mono) or ioPortIdRight (stereo right),
+    // so we must check both indexes for conflicts.
+    const checkExclusivity = async (portId: Id<"ioPorts">) => {
+      const [usedAsLeft, usedAsRight] = await Promise.all([
+        ctx.db
+          .query("outputChannels")
+          .withIndex("by_ioPort", (q) => q.eq("ioPortId", portId))
+          .collect(),
+        ctx.db
+          .query("outputChannels")
+          .withIndex("by_ioPortRight", (q) => q.eq("ioPortIdRight", portId))
+          .collect(),
+      ]);
+
+      const conflictLeft = usedAsLeft.find(ch => ch._id !== args.channelId);
+      const conflictRight = usedAsRight.find(ch => ch._id !== args.channelId);
+      const conflict = conflictLeft ?? conflictRight;
+
+      if (conflict) {
+        if (!args.force) {
+          const conflictMixer = conflict.mixerId ? await ctx.db.get(conflict.mixerId) : null;
+          return {
+            conflict: true,
+            usedBy: {
+              channelId: conflict._id,
+              mixerName: conflictMixer?.name ?? "Unknown",
+              channelNumber: conflict.order,
+            },
+          };
+        }
+        // Force: clear the port from the existing channel(s)
+        if (conflictLeft) {
+          await ctx.db.patch(conflictLeft._id, { ioPortId: undefined });
+        }
+        if (conflictRight) {
+          await ctx.db.patch(conflictRight._id, { ioPortIdRight: undefined });
+        }
+      }
+      return null;
+    };
+
+    if (args.ioPortId && args.ioPortId !== null) {
+      const result = await checkExclusivity(args.ioPortId);
+      if (result) return result;
+    }
+
+    if (args.ioPortIdRight && args.ioPortIdRight !== null) {
+      const result = await checkExclusivity(args.ioPortIdRight);
+      if (result) return result;
     }
 
     const updates: { ioPortId?: Id<"ioPorts"> | undefined; ioPortIdRight?: Id<"ioPorts"> | undefined } = {};
@@ -471,6 +541,7 @@ export const patchOutputChannel = mutation({
     }
 
     await ctx.db.patch(args.channelId, updates);
+    return null;
   },
 });
 
