@@ -6,11 +6,22 @@ import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Download, Users } from "lucide-react";
-import { ThemeSwitcher } from "@/components/ui/theme-switcher";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Download, Users, MoreVertical, Sun, Moon, Monitor, Settings } from "lucide-react";
+import { useTheme } from "next-themes";
 import { PatchList } from "@/components/project/patch-list";
 import { IOOverview } from "@/components/project/io-overview";
 import { MixerSettingsDialog } from "@/components/project/mixer-settings-dialog";
@@ -27,6 +38,8 @@ export default function ProjectPage() {
   const projectId = params.id as Id<"projects">;
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const [mixerSettingsOpen, setMixerSettingsOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   const project = useQuery(api.projects.get, { projectId }) as Project | null | undefined;
   const mixers = useQuery(api.mixers.list, { projectId }) as Mixer[] | undefined;
@@ -57,19 +70,33 @@ export default function ProjectPage() {
   return (
     <PortDataProvider projectId={projectId}>
       <UndoRedoProvider>
+      <Tabs defaultValue="patch-list">
       <div className="min-h-screen bg-background flex flex-col">
         {/* Header */}
         <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-          <div className="container mx-auto px-4 py-3">
+          <div className="container mx-auto px-4 py-2">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" asChild>
-                  <Link href="/dashboard">
-                    <ArrowLeft className="h-4 w-4" />
-                  </Link>
-                </Button>
-                <div>
-                  <h1 className="text-lg font-semibold">{project.title}</h1>
+              <div className="flex items-center gap-4 min-w-0 flex-1">
+                <Link href="/dashboard" className="shrink-0">
+                  <Image
+                    src="/brand/betterpatchtool-logo-a-light.svg"
+                    alt="BetterPatchTool"
+                    width={210}
+                    height={48}
+                    priority
+                    className="dark:hidden"
+                  />
+                  <Image
+                    src="/brand/betterpatchtool-logo-a-dark.svg"
+                    alt="BetterPatchTool"
+                    width={210}
+                    height={48}
+                    priority
+                    className="hidden dark:block"
+                  />
+                </Link>
+                <div className="border-l pl-4 min-w-0">
+                  <h1 className="text-lg font-semibold truncate">{project.title}</h1>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     {project.date && <span>{project.date}</span>}
                     {project.venue && (
@@ -82,69 +109,105 @@ export default function ProjectPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <TabsList className="shrink-0">
+                <TabsTrigger value="patch-list">Patch List</TabsTrigger>
+                <TabsTrigger value="matrix">Matrix</TabsTrigger>
+                <TabsTrigger value="stageboxes">Stageboxes</TabsTrigger>
+                <TabsTrigger value="io-devices">IO Devices</TabsTrigger>
+              </TabsList>
+
+              <div className="flex items-center gap-1 flex-1 justify-end">
                 {currentMixer && (
-                  <Badge variant="outline" className="hidden sm:flex">
+                  <Badge variant="outline" className="hidden lg:flex">
                     {currentMixer.name} ({currentMixer.channelCount}ch)
                   </Badge>
                 )}
+                <UndoRedoButtons />
                 <SnapshotPanel
-                projectId={projectId}
-                ownerId={project.ownerId}
-                onRestored={(name) =>
-                  setRestoreMessage(`Projekt auf Savepoint "${name}" zurückgesetzt.`)
-                }
-              />
-              <UndoRedoButtons />
-              <ThemeSwitcher />
-                <Button variant="ghost" size="icon">
-                  <Users className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => setExportDialogOpen(true)}>
-                  <Download className="h-4 w-4" />
-                </Button>
-                {currentMixer && (
-                  <MixerSettingsDialog
-                    projectId={projectId}
-                    mixer={currentMixer}
-                  />
-                )}
+                  projectId={projectId}
+                  ownerId={project.ownerId}
+                  onRestored={(name) =>
+                    setRestoreMessage(`Projekt auf Savepoint "${name}" zurückgesetzt.`)
+                  }
+                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setExportDialogOpen(true)}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Export PDF
+                    </DropdownMenuItem>
+                    {currentMixer && (
+                      <DropdownMenuItem onClick={() => setMixerSettingsOpen(true)}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Mixer Settings
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem>
+                      <Users className="mr-2 h-4 w-4" />
+                      Collaborators
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        {theme === "dark" ? (
+                          <Moon className="mr-2 h-4 w-4" />
+                        ) : theme === "light" ? (
+                          <Sun className="mr-2 h-4 w-4" />
+                        ) : (
+                          <Monitor className="mr-2 h-4 w-4" />
+                        )}
+                        Theme
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        <DropdownMenuItem onClick={() => setTheme("light")}>
+                          <Sun className="mr-2 h-4 w-4" />
+                          Light
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setTheme("dark")}>
+                          <Moon className="mr-2 h-4 w-4" />
+                          Dark
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setTheme("system")}>
+                          <Monitor className="mr-2 h-4 w-4" />
+                          System
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </div>
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 container mx-auto px-4 py-4">
-        {restoreMessage && (
-          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-            {restoreMessage}
-          </div>
-        )}
-          <Tabs defaultValue="patch-list" className="h-full">
-            <TabsList className="mb-4">
-              <TabsTrigger value="patch-list">Patch List</TabsTrigger>
-              <TabsTrigger value="matrix">Patch Matrix</TabsTrigger>
-              <TabsTrigger value="stageboxes">Stageboxes</TabsTrigger>
-              <TabsTrigger value="io-devices">IO Devices</TabsTrigger>
-            </TabsList>
+        <main className="flex-1 container mx-auto px-4 py-3">
+          {restoreMessage && (
+            <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-900">
+              {restoreMessage}
+            </div>
+          )}
 
-            <TabsContent value="patch-list" className="mt-0">
-              <PatchList projectId={projectId} />
-            </TabsContent>
+          <TabsContent value="patch-list" className="mt-0">
+            <PatchList projectId={projectId} />
+          </TabsContent>
 
-            <TabsContent value="matrix" className="mt-0">
-              <PatchMatrix projectId={projectId} />
-            </TabsContent>
+          <TabsContent value="matrix" className="mt-0">
+            <PatchMatrix projectId={projectId} />
+          </TabsContent>
 
-            <TabsContent value="stageboxes" className="mt-0">
-              <StageboxOverview projectId={projectId} />
-            </TabsContent>
+          <TabsContent value="stageboxes" className="mt-0">
+            <StageboxOverview projectId={projectId} />
+          </TabsContent>
 
-            <TabsContent value="io-devices" className="mt-0">
-              <IOOverview projectId={projectId} />
-            </TabsContent>
-          </Tabs>
+          <TabsContent value="io-devices" className="mt-0">
+            <IOOverview projectId={projectId} />
+          </TabsContent>
         </main>
 
         {/* PDF Export Dialog */}
@@ -155,7 +218,18 @@ export default function ProjectPage() {
           mixers={mixers ?? []}
           projectId={projectId}
         />
+
+        {/* Mixer Settings Dialog */}
+        {currentMixer && (
+          <MixerSettingsDialog
+            projectId={projectId}
+            mixer={currentMixer}
+            open={mixerSettingsOpen}
+            onOpenChange={setMixerSettingsOpen}
+          />
+        )}
       </div>
+      </Tabs>
       </UndoRedoProvider>
     </PortDataProvider>
   );

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Plus, MoreVertical, Calendar, MapPin, Copy, Archive } from "lucide-react";
 import { ThemeSwitcher } from "@/components/ui/theme-switcher";
+import Image from "next/image";
 import { formatDistanceToNow } from "@/lib/date-utils";
 import type { Project } from "@/types/convex";
 
@@ -48,8 +49,22 @@ export default function DashboardPage() {
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">BetterPatchTool</h1>
-            <p className="text-sm text-muted-foreground">Dashboard</p>
+            <Image
+              src="/brand/betterpatchtool-logo-a-light.svg"
+              alt="BetterPatchTool"
+              width={210}
+              height={48}
+              priority
+              className="dark:hidden"
+            />
+            <Image
+              src="/brand/betterpatchtool-logo-a-dark.svg"
+              alt="BetterPatchTool"
+              width={210}
+              height={48}
+              priority
+              className="hidden dark:block"
+            />
           </div>
           <div className="flex items-center gap-2">
             <ThemeSwitcher />

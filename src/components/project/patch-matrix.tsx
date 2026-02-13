@@ -215,7 +215,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
     ) => {
       const isAssigned = currentPortId === portId;
 
-      // Handle Shift+Click for diagonal patching (only for mono channels or simplified stereo)
+      // Handle Shift+Click for diagonal patching
       if (isShiftClick && channels && visiblePorts.length > 0) {
         if (!diagonalAnchor) {
           // Set anchor - mode depends on whether the anchor cell is patched
@@ -233,16 +233,23 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           const cells = getDiagonalCells(diagonalAnchor, end);
           const patches = cells
             .filter((cell) => cell.row < channels.length && cell.col < visiblePorts.length)
-            .map((cell) => ({
-              channelId: channels[cell.row].originalChannel._id,
-              ioPortId: diagonalAnchor.mode === "patch" ? visiblePorts[cell.col]._id : null,
-            }));
+            .map((cell) => {
+              const expandedRow = channels[cell.row];
+              return {
+                channelId: expandedRow.originalChannel._id,
+                ioPortId: diagonalAnchor.mode === "patch" ? visiblePorts[cell.col]._id : null,
+                stereoSide: expandedRow.stereoSide,
+              };
+            });
 
           if (patches.length > 0) {
-            // Capture old port ids for undo
+            // Capture old port ids for undo (respecting stereo side)
             const oldPatches = patches.map((p) => {
               const ch = rawChannels?.find((c) => c._id === p.channelId);
-              return { channelId: p.channelId, ioPortId: ch?.ioPortId ?? null };
+              const oldPortId = p.stereoSide === "right"
+                ? (ch?.ioPortIdRight ?? null)
+                : (ch?.ioPortId ?? null);
+              return { channelId: p.channelId, ioPortId: oldPortId, stereoSide: p.stereoSide };
             });
 
             await batchPatchChannels({ channelType, patches });
@@ -647,32 +654,28 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
       {/* Controls */}
       <div className="flex items-center justify-between gap-6">
         <div className="flex items-center gap-2">
-          <Button
-            variant={channelType === "input" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setChannelType("input")}
-          >
-            Input Channels
-          </Button>
-          <Button
-            variant={channelType === "output" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setChannelType("output")}
-          >
-            Output Channels
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowGlobalClearDialog(true)}
-            disabled={getGlobalClearCount === 0}
-            className="text-destructive"
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Clear All Patches
-          </Button>
-        </div>
-        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+            <button
+              onClick={() => setChannelType("input")}
+              className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                channelType === "input"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Input
+            </button>
+            <button
+              onClick={() => setChannelType("output")}
+              className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                channelType === "output"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Output
+            </button>
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-2">
@@ -684,7 +687,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                 <ChevronDown className="h-4 w-4 opacity-50" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="start" className="w-56">
               <DropdownMenuItem
                 onClick={selectAllDevices}
                 onSelect={(e) => e.preventDefault()}
@@ -730,9 +733,21 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
             />
             Show unassigned ports only
           </label>
+        </div>
+        <div className="flex items-center gap-4">
           <span className="text-xs text-muted-foreground">
             Arrow keys navigate · Space/Enter toggle · Shift+Click diagonal · Esc deselect
           </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowGlobalClearDialog(true)}
+            disabled={getGlobalClearCount === 0}
+            className="text-destructive"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Clear All Patches
+          </Button>
         </div>
       </div>
 

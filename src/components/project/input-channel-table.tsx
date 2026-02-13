@@ -27,9 +27,11 @@ import { useUndoRedo } from "@/hooks/use-undo-redo";
 
 interface InputChannelTableProps {
   projectId: Id<"projects">;
+  channelType?: "input" | "output";
+  onChannelTypeChange?: (type: "input" | "output") => void;
 }
 
-export function InputChannelTable({ projectId }: InputChannelTableProps) {
+export function InputChannelTable({ projectId, channelType, onChannelTypeChange }: InputChannelTableProps) {
   const channels = useQuery(api.inputChannels.list, { projectId });
   const mixers = useQuery(api.mixers.list, { projectId });
 
@@ -569,20 +571,41 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium">
-          Input Channels ({channels.length})
-        </h3>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            Tab/Enter navigate · F2 edit · Alt+↑↓ move · Alt+Enter copy+increment
-          </span>
-          <Button onClick={handleAddChannel} size="sm">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Channel
-          </Button>
+        <div className="flex items-center gap-3">
+          {onChannelTypeChange ? (
+            <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+              <button
+                onClick={() => onChannelTypeChange("input")}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  channelType === "input"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Input
+              </button>
+              <button
+                onClick={() => onChannelTypeChange("output")}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  channelType === "output"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Output
+              </button>
+            </div>
+          ) : (
+            <h3 className="text-lg font-medium">
+              Input Channels ({channels.length})
+            </h3>
+          )}
         </div>
+        <span className="text-xs text-muted-foreground hidden lg:inline">
+          Tab/Enter navigate · F2 edit · Alt+↑↓ move · Alt+Enter copy+increment
+        </span>
       </div>
 
       {/* Selection toolbar */}
@@ -640,6 +663,11 @@ export function InputChannelTable({ projectId }: InputChannelTableProps) {
           )}
         </div>
       </PortDropdownContext.Provider>
+
+      <Button onClick={handleAddChannel} size="sm" variant="outline" className="w-full">
+        <Plus className="mr-2 h-4 w-4" />
+        Add Channel
+      </Button>
 
       <AutoPatchDialog
         open={autoPatchDialogOpen}

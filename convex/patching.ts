@@ -749,27 +749,27 @@ export const batchPatchChannels = mutation({
     patches: v.array(v.object({
       channelId: v.string(),
       ioPortId: v.union(v.string(), v.null()),
+      stereoSide: v.optional(v.union(v.literal("left"), v.literal("right"), v.null())),
     })),
   },
   handler: async (ctx, args) => {
     for (const patch of args.patches) {
+      const portField = patch.stereoSide === "right" ? "ioPortIdRight" : "ioPortId";
+      const expectedPortType = args.channelType === "input" ? "input" : "output";
+
       if (args.channelType === "input") {
         const channelId = patch.channelId as Id<"inputChannels">;
         const channel = await ctx.db.get(channelId);
         if (!channel) continue;
 
         if (patch.ioPortId === null) {
-          await ctx.db.patch(channelId, {
-            ioPortId: undefined,
-          });
+          await ctx.db.patch(channelId, { [portField]: undefined });
         } else {
           const portId = patch.ioPortId as Id<"ioPorts">;
           const port = await ctx.db.get(portId);
-          if (!port || port.type !== "input") continue;
+          if (!port || port.type !== expectedPortType) continue;
 
-          await ctx.db.patch(channelId, {
-            ioPortId: portId,
-          });
+          await ctx.db.patch(channelId, { [portField]: portId });
         }
       } else {
         const channelId = patch.channelId as Id<"outputChannels">;
@@ -777,13 +777,13 @@ export const batchPatchChannels = mutation({
         if (!channel) continue;
 
         if (patch.ioPortId === null) {
-          await ctx.db.patch(channelId, { ioPortId: undefined });
+          await ctx.db.patch(channelId, { [portField]: undefined });
         } else {
           const portId = patch.ioPortId as Id<"ioPorts">;
           const port = await ctx.db.get(portId);
-          if (!port || port.type !== "output") continue;
+          if (!port || port.type !== expectedPortType) continue;
 
-          await ctx.db.patch(channelId, { ioPortId: portId });
+          await ctx.db.patch(channelId, { [portField]: portId });
         }
       }
     }

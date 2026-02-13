@@ -29,13 +29,19 @@ import type { Mixer } from "@/types/convex";
 interface MixerSettingsDialogProps {
   projectId: Id<"projects">;
   mixer: Mixer;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function MixerSettingsDialog({
   projectId,
   mixer,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: MixerSettingsDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = controlledOnOpenChange ?? setInternalOpen;
   const [name, setName] = useState(mixer.name);
   const [type, setType] = useState(mixer.type || "");
   const [stereoMode, setStereoMode] = useState(mixer.stereoMode);
@@ -108,11 +114,13 @@ export function MixerSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon">
-          <Settings className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
+      {controlledOpen === undefined && (
+        <DialogTrigger asChild>
+          <Button variant="ghost" size="icon">
+            <Settings className="h-4 w-4" />
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Mixer Settings</DialogTitle>

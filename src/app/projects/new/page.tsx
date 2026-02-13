@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +16,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArrowLeft } from "lucide-react";
 
 // Temporary demo user ID until Clerk is set up
 const DEMO_USER_ID = "demo-user-123";
@@ -56,14 +56,28 @@ export default function NewProjectPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <Button variant="ghost" asChild className="mb-2">
-            <Link href="/dashboard">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Dashboard
-            </Link>
-          </Button>
-          <h1 className="text-2xl font-bold">Create New Project</h1>
+        <div className="container mx-auto px-4 py-4 flex items-center gap-4">
+          <Link href="/dashboard" className="shrink-0">
+            <Image
+              src="/brand/betterpatchtool-logo-a-light.svg"
+              alt="BetterPatchTool"
+              width={140}
+              height={32}
+              priority
+              className="dark:hidden"
+            />
+            <Image
+              src="/brand/betterpatchtool-logo-a-dark.svg"
+              alt="BetterPatchTool"
+              width={140}
+              height={32}
+              priority
+              className="hidden dark:block"
+            />
+          </Link>
+          <div className="border-l pl-4">
+            <h1 className="text-2xl font-bold">Create New Project</h1>
+          </div>
         </div>
       </header>
 
