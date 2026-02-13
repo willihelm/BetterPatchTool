@@ -985,9 +985,14 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                     const isActive =
                       activeCell?.row === rowIndex && activeCell?.col === colIndex;
                     const otherChannelId = portToChannelMap.get(port._id);
-                    // For stereo channels, don't mark the opposite side's port as "used by other"
+                    // Check if port is used by the other stereo side of the SAME channel
+                    const isUsedByStereoSibling = channel.stereoSide !== null &&
+                      otherChannelId === orig._id && !isAssigned && (
+                        (channel.stereoSide === "left" && orig.ioPortIdRight === port._id) ||
+                        (channel.stereoSide === "right" && orig.ioPortId === port._id)
+                      );
                     const isUsedByOther =
-                      otherChannelId && otherChannelId !== orig._id;
+                      (otherChannelId && otherChannelId !== orig._id) || isUsedByStereoSibling;
 
                     // Cross-mixer detection: check if port is used by a channel on a different mixer
                     const portUsage = portUsageMap[port._id];
