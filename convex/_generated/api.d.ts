@@ -8,11 +8,14 @@
  * @module
  */
 
+import type * as _helpers_portGeneration from "../_helpers/portGeneration.js";
 import type * as auth from "../auth.js";
 import type * as blockPresets from "../blockPresets.js";
 import type * as groups from "../groups.js";
 import type * as http from "../http.js";
 import type * as inputChannels from "../inputChannels.js";
+import type * as inventoryIODevices from "../inventoryIODevices.js";
+import type * as inventoryMixers from "../inventoryMixers.js";
 import type * as ioDevices from "../ioDevices.js";
 import type * as migrations from "../migrations.js";
 import type * as mixers from "../mixers.js";
@@ -29,11 +32,14 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "_helpers/portGeneration": typeof _helpers_portGeneration;
   auth: typeof auth;
   blockPresets: typeof blockPresets;
   groups: typeof groups;
   http: typeof http;
   inputChannels: typeof inputChannels;
+  inventoryIODevices: typeof inventoryIODevices;
+  inventoryMixers: typeof inventoryMixers;
   ioDevices: typeof ioDevices;
   migrations: typeof migrations;
   mixers: typeof mixers;

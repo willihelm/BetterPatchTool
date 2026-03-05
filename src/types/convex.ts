@@ -104,6 +104,35 @@ export interface OutputChannel {
   notes?: string;
 }
 
+export interface InventoryIODevice {
+  _id: string;
+  _creationTime: number;
+  userId: string;
+  name: string;
+  shortName: string;
+  color: string;
+  inputCount: number;
+  outputCount: number;
+  headphoneOutputCount?: number;
+  aesInputCount?: number;
+  aesOutputCount?: number;
+  deviceType?: "stagebox" | "generic";
+  portsPerRow?: number;
+  order?: number;
+}
+
+export interface InventoryMixer {
+  _id: string;
+  _creationTime: number;
+  userId: string;
+  name: string;
+  type?: string;
+  stereoMode: "linked_mono" | "true_stereo";
+  channelCount: number;
+  outputChannelCount?: number;
+  order?: number;
+}
+
 export interface ProjectSnapshot {
   _id: string;
   _creationTime: number;

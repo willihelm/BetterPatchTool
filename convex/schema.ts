@@ -142,6 +142,37 @@ export default defineSchema({
     .index("by_ioPort", ["ioPortId"])
     .index("by_ioPortRight", ["ioPortIdRight"]),
 
+  // Inventory IO Devices (user-owned, project-independent)
+  inventoryIODevices: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    shortName: v.string(),
+    color: v.string(),
+    inputCount: v.number(),
+    outputCount: v.number(),
+    headphoneOutputCount: v.optional(v.number()),
+    aesInputCount: v.optional(v.number()),
+    aesOutputCount: v.optional(v.number()),
+    deviceType: v.optional(v.union(v.literal("stagebox"), v.literal("generic"))),
+    portsPerRow: v.optional(v.number()),
+    order: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_order", ["userId", "order"]),
+
+  // Inventory Mixers (user-owned, project-independent)
+  inventoryMixers: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    type: v.optional(v.string()),
+    stereoMode: v.union(v.literal("linked_mono"), v.literal("true_stereo")),
+    channelCount: v.number(),
+    outputChannelCount: v.optional(v.number()),
+    order: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_order", ["userId", "order"]),
+
   // Templates
   templates: defineTable({
     userId: v.string(),

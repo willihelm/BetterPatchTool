@@ -29,11 +29,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Box, ArrowRight, ArrowLeft, Eye, Grid3X3, List, Headphones, GripVertical, Settings } from "lucide-react";
+import { Plus, Trash2, Box, ArrowRight, ArrowLeft, Eye, Grid3X3, List, Headphones, GripVertical, Settings, Package, Save } from "lucide-react";
 import Link from "next/link";
 import type { IODevice, Mixer } from "@/types/convex";
 import { IODeviceEditDialog } from "./io-device-edit-dialog";
 import { MixerSettingsDialog } from "./mixer-settings-dialog";
+import { AddFromInventoryDialog } from "./add-from-inventory-dialog";
 import {
   DndContext,
   closestCenter,
@@ -71,9 +72,10 @@ interface SortableIODeviceCardProps {
   ioDevice: IODevice;
   projectId: Id<"projects">;
   onRemove: () => void;
+  onSaveToInventory: () => void;
 }
 
-function SortableIODeviceCard({ ioDevice, projectId, onRemove }: SortableIODeviceCardProps) {
+function SortableIODeviceCard({ ioDevice, projectId, onRemove, onSaveToInventory }: SortableIODeviceCardProps) {
   const {
     attributes,
     listeners,
@@ -151,6 +153,14 @@ function SortableIODeviceCard({ ioDevice, projectId, onRemove }: SortableIODevic
           </Button>
           <IODeviceEditDialog ioDevice={ioDevice} />
           <Button
+            variant="outline"
+            size="icon"
+            onClick={onSaveToInventory}
+            title="Save to Inventory"
+          >
+            <Save className="h-4 w-4" />
+          </Button>
+          <Button
             variant="destructive"
             size="icon"
             onClick={onRemove}
@@ -169,9 +179,10 @@ interface SortableMixerCardProps {
   canDelete: boolean;
   onEdit: () => void;
   onRemove: () => void;
+  onSaveToInventory: () => void;
 }
 
-function SortableMixerCard({ mixer, canDelete, onEdit, onRemove }: SortableMixerCardProps) {
+function SortableMixerCard({ mixer, canDelete, onEdit, onRemove, onSaveToInventory }: SortableMixerCardProps) {
   const {
     attributes,
     listeners,
@@ -226,6 +237,14 @@ function SortableMixerCard({ mixer, canDelete, onEdit, onRemove }: SortableMixer
             <Settings className="h-4 w-4" />
           </Button>
           <Button
+            variant="outline"
+            size="icon"
+            onClick={onSaveToInventory}
+            title="Save to Inventory"
+          >
+            <Save className="h-4 w-4" />
+          </Button>
+          <Button
             variant="destructive"
             size="icon"
             onClick={onRemove}
@@ -259,9 +278,12 @@ export function IOOverview({ projectId }: IOOverviewProps) {
   const createMixer = useMutation(api.mixers.create);
   const removeMixer = useMutation(api.mixers.remove);
   const reorderMixers = useMutation(api.mixers.reorderMixers);
+  const saveIODeviceToInventory = useMutation(api.inventoryIODevices.saveFromProject);
+  const saveMixerToInventory = useMutation(api.inventoryMixers.saveFromProject);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isMixerDialogOpen, setIsMixerDialogOpen] = useState(false);
+  const [inventoryDialogType, setInventoryDialogType] = useState<"io-device" | "mixer" | null>(null);
   const [mixerSettingsTarget, setMixerSettingsTarget] = useState<Mixer | null>(null);
   const [newMixer, setNewMixer] = useState({
     name: "",
@@ -406,6 +428,11 @@ export function IOOverview({ projectId }: IOOverviewProps) {
           <h3 className="text-lg font-medium">
             Mixers ({mixers?.length ?? 0})
           </h3>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setInventoryDialogType("mixer")}>
+              <Package className="mr-2 h-4 w-4" />
+              From Inventory
+            </Button>
           <Dialog open={isMixerDialogOpen} onOpenChange={setIsMixerDialogOpen}>
             <DialogTrigger asChild>
               <Button size="sm">
@@ -488,6 +515,7 @@ export function IOOverview({ projectId }: IOOverviewProps) {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {mixers && mixers.length > 0 && (
@@ -508,6 +536,7 @@ export function IOOverview({ projectId }: IOOverviewProps) {
                     canDelete={mixers.length > 1}
                     onEdit={() => setMixerSettingsTarget(mixer as Mixer)}
                     onRemove={() => handleRemoveMixer(mixer._id)}
+                    onSaveToInventory={() => saveMixerToInventory({ mixerId: mixer._id as Id<"mixers"> })}
                   />
                 ))}
               </div>
@@ -532,6 +561,11 @@ export function IOOverview({ projectId }: IOOverviewProps) {
         <h3 className="text-lg font-medium">
           IO Devices ({ioDevices.length})
         </h3>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => setInventoryDialogType("io-device")}>
+            <Package className="mr-2 h-4 w-4" />
+            From Inventory
+          </Button>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm">
@@ -757,6 +791,7 @@ export function IOOverview({ projectId }: IOOverviewProps) {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {ioDevices.length === 0 ? (
@@ -789,6 +824,7 @@ export function IOOverview({ projectId }: IOOverviewProps) {
                   ioDevice={ioDevice as IODevice}
                   projectId={projectId}
                   onRemove={() => removeIODevice({ ioDeviceId: ioDevice._id })}
+                  onSaveToInventory={() => saveIODeviceToInventory({ ioDeviceId: ioDevice._id })}
                 />
               ))}
             </div>
@@ -796,6 +832,16 @@ export function IOOverview({ projectId }: IOOverviewProps) {
         </DndContext>
       )}
       </div>
+
+      {/* From Inventory Dialog */}
+      {inventoryDialogType && (
+        <AddFromInventoryDialog
+          projectId={projectId}
+          type={inventoryDialogType}
+          open={!!inventoryDialogType}
+          onOpenChange={(open) => !open && setInventoryDialogType(null)}
+        />
+      )}
     </div>
   );
 }

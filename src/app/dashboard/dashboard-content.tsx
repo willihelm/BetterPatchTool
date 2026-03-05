@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery, useMutation } from "convex/react";
-import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import Link from "next/link";
@@ -19,14 +18,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreVertical, Calendar, MapPin, Copy, Archive, LogOut } from "lucide-react";
-import { ThemeSwitcher } from "@/components/ui/theme-switcher";
-import Image from "next/image";
+import { Plus, MoreVertical, Calendar, MapPin, Copy, Archive } from "lucide-react";
 import { formatDistanceToNow } from "@/lib/date-utils";
 import type { Project } from "@/types/convex";
+import { AppHeader } from "@/components/shared/app-header";
 
 export function DashboardContent() {
-  const { signOut } = useAuthActions();
   const projects = useQuery(api.projects.list, {}) as Project[] | undefined;
   const archiveProject = useMutation(api.projects.archive);
   const duplicateProject = useMutation(api.projects.duplicate);
@@ -44,45 +41,16 @@ export function DashboardContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <Image
-              src="/brand/betterpatchtool-logo-a-light.svg"
-              alt="BetterPatchTool"
-              width={210}
-              height={48}
-              priority
-              className="dark:hidden"
-            />
-            <Image
-              src="/brand/betterpatchtool-logo-a-dark.svg"
-              alt="BetterPatchTool"
-              width={210}
-              height={48}
-              priority
-              className="hidden dark:block"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeSwitcher />
-            <Button asChild>
-              <Link href="/projects/new">
-                <Plus className="mr-2 h-4 w-4" />
-                New Project
-              </Link>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => void signOut()}
-              title="Sign out"
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        actions={
+          <Button asChild>
+            <Link href="/projects/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New Project
+            </Link>
+          </Button>
+        }
+      />
 
       <main className="container mx-auto px-4 py-8">
         <section>

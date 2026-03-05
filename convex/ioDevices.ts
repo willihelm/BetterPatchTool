@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { generatePorts } from "./_helpers/portGeneration";
 
 // Get all IO devices for a project
 export const list = query({
@@ -173,94 +174,15 @@ export const create = mutation({
       order: maxOrder + 1,
     });
 
-    // Create input ports
-    for (let i = 1; i <= args.inputCount; i++) {
-      await ctx.db.insert("ioPorts", {
-        ioDeviceId,
-        type: "input",
-        portNumber: i,
-        label: `${args.shortName}-I${i}`,
-        subType: "regular",
-      });
-    }
-
-    // Create output ports
-    for (let i = 1; i <= args.outputCount; i++) {
-      await ctx.db.insert("ioPorts", {
-        ioDeviceId,
-        type: "output",
-        portNumber: i,
-        label: `${args.shortName}-O${i}`,
-        subType: "regular",
-      });
-    }
-
-    // Create headphone output ports (stereo pairs)
-    for (let i = 1; i <= headphoneOutputCount; i++) {
-      // Left channel
-      await ctx.db.insert("ioPorts", {
-        ioDeviceId,
-        type: "output",
-        portNumber: args.outputCount + (i - 1) * 2 + 1,
-        label: `${args.shortName}-HP${i}L`,
-        subType: "headphone_left",
-        headphoneNumber: i,
-      });
-      // Right channel
-      await ctx.db.insert("ioPorts", {
-        ioDeviceId,
-        type: "output",
-        portNumber: args.outputCount + (i - 1) * 2 + 2,
-        label: `${args.shortName}-HP${i}R`,
-        subType: "headphone_right",
-        headphoneNumber: i,
-      });
-    }
-
-    // Create AES input ports (stereo pairs)
-    for (let i = 1; i <= aesInputCount; i++) {
-      // Left channel
-      await ctx.db.insert("ioPorts", {
-        ioDeviceId,
-        type: "input",
-        portNumber: args.inputCount + (i - 1) * 2 + 1,
-        label: `${args.shortName}-AES${i}L`,
-        subType: "aes_left",
-        aesNumber: i,
-      });
-      // Right channel
-      await ctx.db.insert("ioPorts", {
-        ioDeviceId,
-        type: "input",
-        portNumber: args.inputCount + (i - 1) * 2 + 2,
-        label: `${args.shortName}-AES${i}R`,
-        subType: "aes_right",
-        aesNumber: i,
-      });
-    }
-
-    // Create AES output ports (stereo pairs)
-    const hpPortCount = headphoneOutputCount * 2;
-    for (let i = 1; i <= aesOutputCount; i++) {
-      // Left channel
-      await ctx.db.insert("ioPorts", {
-        ioDeviceId,
-        type: "output",
-        portNumber: args.outputCount + hpPortCount + (i - 1) * 2 + 1,
-        label: `${args.shortName}-AESO${i}L`,
-        subType: "aes_left",
-        aesNumber: i,
-      });
-      // Right channel
-      await ctx.db.insert("ioPorts", {
-        ioDeviceId,
-        type: "output",
-        portNumber: args.outputCount + hpPortCount + (i - 1) * 2 + 2,
-        label: `${args.shortName}-AESO${i}R`,
-        subType: "aes_right",
-        aesNumber: i,
-      });
-    }
+    await generatePorts(ctx, {
+      ioDeviceId,
+      shortName: args.shortName,
+      inputCount: args.inputCount,
+      outputCount: args.outputCount,
+      headphoneOutputCount,
+      aesInputCount,
+      aesOutputCount,
+    });
 
     return ioDeviceId;
   },
