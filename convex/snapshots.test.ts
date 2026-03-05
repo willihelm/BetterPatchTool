@@ -6,25 +6,25 @@ import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
 
-async function setupProject(t: ReturnType<typeof convexTest>) {
-  const projectId = await t.run(async (ctx) => {
-    return await ctx.db.insert("projects", {
-      title: "Snapshot Project",
-      ownerId: "demo-user",
-      collaborators: [],
-      isArchived: false,
-    });
+async function setupProject(
+  t: ReturnType<typeof convexTest>,
+  asUser: ReturnType<ReturnType<typeof convexTest>["withIdentity"]>
+) {
+  // Create project via authenticated mutation so ownerId matches the auth user
+  const projectId = await asUser.mutation(api.projects.create, {
+    title: "Snapshot Project",
+    channelCount: 1,
+    outputChannelCount: 1,
   });
 
-  const mixerId = await t.run(async (ctx) => {
-    return await ctx.db.insert("mixers", {
-      projectId,
-      name: "FOH",
-      stereoMode: "linked_mono",
-      channelCount: 8,
-      designation: "A",
-    });
+  // Get the mixer that was auto-created
+  const mixers = await t.run(async (ctx) => {
+    return await ctx.db
+      .query("mixers")
+      .filter((q) => q.eq(q.field("projectId"), projectId))
+      .collect();
   });
+  const mixerId = mixers[0]._id;
 
   const groupId = await t.run(async (ctx) => {
     return await ctx.db.insert("groups", {
@@ -56,23 +56,30 @@ async function setupProject(t: ReturnType<typeof convexTest>) {
     });
   });
 
+  // Update the auto-created input channel with test data, and add IO device/group refs
   await t.run(async (ctx) => {
-    await ctx.db.insert("inputChannels", {
-      projectId,
-      order: 1,
-      channelNumber: 1,
-      mixerId,
-      ioPortId,
-      source: "Kick",
-      patched: true,
-      groupId,
-    });
-    await ctx.db.insert("outputChannels", {
-      projectId,
-      order: 1,
-      busName: "Mon 1",
-      destination: "Drums",
-    });
+    const channel = await ctx.db
+      .query("inputChannels")
+      .filter((q) => q.eq(q.field("projectId"), projectId))
+      .first();
+    if (channel) {
+      await ctx.db.patch(channel._id, {
+        source: "Kick",
+        patched: true,
+        ioPortId,
+        groupId,
+      });
+    }
+    const outChannel = await ctx.db
+      .query("outputChannels")
+      .filter((q) => q.eq(q.field("projectId"), projectId))
+      .first();
+    if (outChannel) {
+      await ctx.db.patch(outChannel._id, {
+        busName: "Mon 1",
+        destination: "Drums",
+      });
+    }
   });
 
   return { projectId, mixerId };
@@ -81,12 +88,12 @@ async function setupProject(t: ReturnType<typeof convexTest>) {
 describe("snapshots", () => {
   it("should create a snapshot with payload data", async () => {
     const t = convexTest(schema, modules);
-    const { projectId } = await setupProject(t);
+    const asUser = t.withIdentity({ subject: "demo-user", issuer: "convex" });
+    const { projectId } = await setupProject(t, asUser);
 
-    const snapshotId = await t.mutation(api.snapshots.create, {
+    const snapshotId = await asUser.mutation(api.snapshots.create, {
       projectId,
       name: "Initial",
-      createdBy: "demo-user",
     });
 
     const list = await t.query(api.snapshots.list, { projectId });
@@ -102,12 +109,12 @@ describe("snapshots", () => {
 
   it("should restore project data from a snapshot", async () => {
     const t = convexTest(schema, modules);
-    const { projectId } = await setupProject(t);
+    const asUser = t.withIdentity({ subject: "demo-user", issuer: "convex" });
+    const { projectId } = await setupProject(t, asUser);
 
-    const snapshotId = await t.mutation(api.snapshots.create, {
+    const snapshotId = await asUser.mutation(api.snapshots.create, {
       projectId,
       name: "Before Changes",
-      createdBy: "demo-user",
     });
 
     await t.run(async (ctx) => {
@@ -117,16 +124,16 @@ describe("snapshots", () => {
       }
       const channel = await ctx.db
         .query("inputChannels")
-        .withIndex("by_project", (q) => q.eq("projectId", projectId))
+        .filter((q) => q.eq(q.field("projectId"), projectId))
         .first();
       if (channel) {
         await ctx.db.patch(channel._id, { source: "Snare" });
       }
     });
 
-    await t.mutation(api.snapshots.restore, { snapshotId });
+    await asUser.mutation(api.snapshots.restore, { snapshotId });
 
-    const restoredProject = await t.query(api.projects.get, { projectId });
+    const restoredProject = await asUser.query(api.projects.get, { projectId });
     expect(restoredProject?.title).toBe("Snapshot Project");
 
     const channels = await t.query(api.inputChannels.list, { projectId });
@@ -136,15 +143,15 @@ describe("snapshots", () => {
 
   it("should delete a snapshot and its data", async () => {
     const t = convexTest(schema, modules);
-    const { projectId } = await setupProject(t);
+    const asUser = t.withIdentity({ subject: "demo-user", issuer: "convex" });
+    const { projectId } = await setupProject(t, asUser);
 
-    const snapshotId = await t.mutation(api.snapshots.create, {
+    const snapshotId = await asUser.mutation(api.snapshots.create, {
       projectId,
       name: "Delete Me",
-      createdBy: "demo-user",
     });
 
-    await t.mutation(api.snapshots.remove, { snapshotId });
+    await asUser.mutation(api.snapshots.remove, { snapshotId });
 
     const list = await t.query(api.snapshots.list, { projectId });
     expect(list).toHaveLength(0);

@@ -31,11 +31,10 @@ import type { ProjectSnapshot } from "@/types/convex";
 
 interface SnapshotPanelProps {
   projectId: Id<"projects">;
-  ownerId: string;
   onRestored?: (snapshotName: string) => void;
 }
 
-export function SnapshotPanel({ projectId, ownerId, onRestored }: SnapshotPanelProps) {
+export function SnapshotPanel({ projectId, onRestored }: SnapshotPanelProps) {
   const snapshots = useQuery(api.snapshots.list, { projectId }) as ProjectSnapshot[] | undefined;
   const createSnapshot = useMutation(api.snapshots.create);
   const restoreSnapshot = useMutation(api.snapshots.restore);
@@ -68,7 +67,6 @@ export function SnapshotPanel({ projectId, ownerId, onRestored }: SnapshotPanelP
         projectId,
         name: name.trim(),
         note: note.trim() || undefined,
-        createdBy: ownerId,
       });
       setName("");
       setNote("");

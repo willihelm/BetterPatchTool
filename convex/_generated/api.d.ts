@@ -8,8 +8,10 @@
  * @module
  */
 
+import type * as auth from "../auth.js";
 import type * as blockPresets from "../blockPresets.js";
 import type * as groups from "../groups.js";
+import type * as http from "../http.js";
 import type * as inputChannels from "../inputChannels.js";
 import type * as ioDevices from "../ioDevices.js";
 import type * as migrations from "../migrations.js";
@@ -18,6 +20,7 @@ import type * as outputChannels from "../outputChannels.js";
 import type * as patching from "../patching.js";
 import type * as projects from "../projects.js";
 import type * as snapshots from "../snapshots.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -26,8 +29,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  auth: typeof auth;
   blockPresets: typeof blockPresets;
   groups: typeof groups;
+  http: typeof http;
   inputChannels: typeof inputChannels;
   ioDevices: typeof ioDevices;
   migrations: typeof migrations;
@@ -36,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   patching: typeof patching;
   projects: typeof projects;
   snapshots: typeof snapshots;
+  users: typeof users;
 }>;
 
 /**

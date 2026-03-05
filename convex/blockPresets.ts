@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 // Channel definition for presets
 const channelDefinition = v.object({
@@ -14,17 +15,18 @@ const channelDefinition = v.object({
 
 // Get all presets for a user (including public and system presets)
 export const list = query({
-  args: { userId: v.optional(v.string()) },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
     const publicPresetsPromise = ctx.db
       .query("blockPresets")
       .withIndex("by_public", (q) => q.eq("isPublic", true))
       .collect();
 
-    const userPresetsPromise = args.userId
+    const userPresetsPromise = userId
       ? ctx.db
           .query("blockPresets")
-          .withIndex("by_user", (q) => q.eq("userId", args.userId))
+          .withIndex("by_user", (q) => q.eq("userId", userId))
           .collect()
       : Promise.resolve([]);
 
@@ -59,15 +61,16 @@ export const get = query({
 // Create preset
 export const create = mutation({
   args: {
-    userId: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
     isPublic: v.boolean(),
     channels: v.array(channelDefinition),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
     return await ctx.db.insert("blockPresets", {
-      userId: args.userId,
+      userId,
       name: args.name,
       description: args.description,
       isPublic: args.isPublic,
@@ -110,12 +113,13 @@ export const remove = mutation({
 // Create preset from selected channels
 export const createFromChannels = mutation({
   args: {
-    userId: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
     channelIds: v.array(v.id("inputChannels")),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
     const existingChannels = await Promise.all(
       args.channelIds.map((channelId) => ctx.db.get(channelId))
     );
@@ -133,7 +137,7 @@ export const createFromChannels = mutation({
       }));
 
     return await ctx.db.insert("blockPresets", {
-      userId: args.userId,
+      userId,
       name: args.name,
       description: args.description,
       isPublic: false,

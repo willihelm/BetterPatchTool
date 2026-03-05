@@ -1,24 +1,34 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 // Get all projects for a user
 export const list = query({
-  args: { ownerId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
     return await ctx.db
       .query("projects")
       .withIndex("by_owner_and_archived", (q) =>
-        q.eq("ownerId", args.ownerId).eq("isArchived", false)
+        q.eq("ownerId", userId).eq("isArchived", false)
       )
       .collect();
   },
 });
 
-// Get a project
+// Get a project (only if owner or collaborator)
 export const get = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.projectId);
+    const userId = await getAuthUserId(ctx);
+    const project = await ctx.db.get(args.projectId);
+    if (!project) return null;
+    if (!userId) return null;
+    if (project.ownerId !== userId && !project.collaborators.includes(userId)) {
+      return null;
+    }
+    return project;
   },
 });
 
@@ -28,11 +38,12 @@ export const create = mutation({
     title: v.string(),
     date: v.optional(v.string()),
     venue: v.optional(v.string()),
-    ownerId: v.string(),
     channelCount: v.optional(v.number()),
     outputChannelCount: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
     const channelCount = args.channelCount ?? 48;
     const outputChannelCount = args.outputChannelCount ?? 24;
 
@@ -40,7 +51,7 @@ export const create = mutation({
       title: args.title,
       date: args.date,
       venue: args.venue,
-      ownerId: args.ownerId,
+      ownerId: userId,
       collaborators: [],
       isArchived: false,
     });
@@ -91,6 +102,13 @@ export const update = mutation({
     venue: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    const project = await ctx.db.get(args.projectId);
+    if (!project) throw new Error("Project not found");
+    if (project.ownerId !== userId && !project.collaborators.includes(userId)) {
+      throw new Error("Not authorized");
+    }
     const { projectId, ...updates } = args;
     const filteredUpdates = Object.fromEntries(
       Object.entries(updates).filter(([_, v]) => v !== undefined)
@@ -99,10 +117,15 @@ export const update = mutation({
   },
 });
 
-// Archive project
+// Archive project (owner only)
 export const archive = mutation({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    const project = await ctx.db.get(args.projectId);
+    if (!project) throw new Error("Project not found");
+    if (project.ownerId !== userId) throw new Error("Not authorized");
     await ctx.db.patch(args.projectId, { isArchived: true });
   },
 });
@@ -112,18 +135,22 @@ export const duplicate = mutation({
   args: {
     projectId: v.id("projects"),
     newTitle: v.string(),
-    ownerId: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
     const original = await ctx.db.get(args.projectId);
     if (!original) throw new Error("Project not found");
+    if (original.ownerId !== userId && !original.collaborators.includes(userId)) {
+      throw new Error("Not authorized");
+    }
 
     // Create new project
     const newProjectId = await ctx.db.insert("projects", {
       title: args.newTitle,
       date: original.date,
       venue: original.venue,
-      ownerId: args.ownerId,
+      ownerId: userId,
       collaborators: [],
       isArchived: false,
     });
@@ -231,15 +258,18 @@ export const duplicate = mutation({
   },
 });
 
-// Add collaborator
+// Add collaborator (owner only)
 export const addCollaborator = mutation({
   args: {
     projectId: v.id("projects"),
     collaboratorId: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
     const project = await ctx.db.get(args.projectId);
     if (!project) throw new Error("Project not found");
+    if (project.ownerId !== userId) throw new Error("Not authorized");
 
     if (!project.collaborators.includes(args.collaboratorId)) {
       await ctx.db.patch(args.projectId, {

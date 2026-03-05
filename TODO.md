@@ -4,7 +4,7 @@ Open tasks based on PRD requirements. Ordered roughly by priority.
 
 ## Authentication & Users
 
-- [ ] Implement user authentication (Clerk / Convex Auth)
+- [x] Implement user authentication (Convex Auth)
 - [ ] Add login/signup flow (replace hardcoded `DEMO_USER_ID`)
 - [ ] Implement pricing tier gating (Free / Pro / Team)
 

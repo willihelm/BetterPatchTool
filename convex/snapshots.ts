@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 const SNAPSHOT_DATA_VERSION = 1;
 
@@ -55,9 +56,10 @@ export const create = mutation({
     projectId: v.id("projects"),
     name: v.string(),
     note: v.optional(v.string()),
-    createdBy: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
     const project = await ctx.db.get(args.projectId);
     if (!project) {
       throw new Error("Project not found");
@@ -114,7 +116,7 @@ export const create = mutation({
 
     const snapshotId = await ctx.db.insert("projectSnapshots", {
       projectId: args.projectId,
-      createdBy: args.createdBy,
+      createdBy: userId,
       createdAt: Date.now(),
       name: args.name,
       note: args.note,
@@ -134,6 +136,16 @@ export const create = mutation({
 export const remove = mutation({
   args: { snapshotId: v.id("projectSnapshots") },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    const snapshot = await ctx.db.get(args.snapshotId);
+    if (!snapshot) throw new Error("Snapshot not found");
+    const project = await ctx.db.get(snapshot.projectId);
+    if (!project) throw new Error("Project not found");
+    if (project.ownerId !== userId && !project.collaborators.includes(userId)) {
+      throw new Error("Not authorized");
+    }
+
     const data = await ctx.db
       .query("projectSnapshotData")
       .withIndex("by_snapshot", (q) => q.eq("snapshotId", args.snapshotId))
@@ -150,9 +162,14 @@ export const remove = mutation({
 export const restore = mutation({
   args: { snapshotId: v.id("projectSnapshots") },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
     const snapshot = await ctx.db.get(args.snapshotId);
-    if (!snapshot) {
-      throw new Error("Snapshot not found");
+    if (!snapshot) throw new Error("Snapshot not found");
+    const project = await ctx.db.get(snapshot.projectId);
+    if (!project) throw new Error("Project not found");
+    if (project.ownerId !== userId && !project.collaborators.includes(userId)) {
+      throw new Error("Not authorized");
     }
 
     const data = await ctx.db

@@ -1,12 +1,19 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
 
 export default defineSchema({
-  // Users
+  ...authTables,
+  // Users (extends authTables.users with custom fields)
   users: defineTable({
-    email: v.string(),
-    name: v.string(),
-    tier: v.union(v.literal("free"), v.literal("pro"), v.literal("team")),
+    // Auth fields (managed by Convex Auth, may be null from OAuth providers)
+    email: v.optional(v.union(v.string(), v.null())),
+    name: v.optional(v.union(v.string(), v.null())),
+    image: v.optional(v.union(v.string(), v.null())),
+    emailVerificationTime: v.optional(v.union(v.number(), v.null())),
+    isAnonymous: v.optional(v.boolean()),
+    // Custom fields
+    tier: v.optional(v.union(v.literal("free"), v.literal("pro"), v.literal("team"))),
     lastLoginAt: v.optional(v.number()),
   }).index("by_email", ["email"]),
 

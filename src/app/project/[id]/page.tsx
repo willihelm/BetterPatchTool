@@ -141,7 +141,6 @@ function ProjectPageContent({ project, projectId }: { project: Project; projectI
                 <UndoRedoButtons />
                 <SnapshotPanel
                   projectId={projectId}
-                  ownerId={project.ownerId}
                   onRestored={(name) =>
                     setRestoreMessage(`Projekt auf Savepoint "${name}" zurückgesetzt.`)
                   }
