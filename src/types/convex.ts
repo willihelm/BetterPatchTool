@@ -92,6 +92,7 @@ export interface OutputChannel {
   projectId: string;
   order: number;
   mixerId?: string;
+  busType?: "group" | "aux" | "fx" | "matrix" | "master" | "cue";
   busName: string;
   ioPortId?: string;
   ioPortIdRight?: string;
@@ -129,7 +130,14 @@ export interface InventoryMixer {
   type?: string;
   stereoMode: "linked_mono" | "true_stereo";
   channelCount: number;
-  outputChannelCount?: number;
+  busConfig?: {
+    groups?: number;
+    auxes?: number;
+    fx?: number;
+    matrices?: number;
+    masters?: number;
+    cue?: number;
+  };
   order?: number;
 }
 

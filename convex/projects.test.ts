@@ -57,17 +57,22 @@ describe("projects", () => {
       expect(channels).toHaveLength(24);
     });
 
-    it("should create initial output channels", async () => {
+    it("should create initial output channels with bus config", async () => {
       const t = convexTest(schema, modules);
       const asUser = t.withIdentity({ subject: "test-user", issuer: "convex" });
 
       const projectId = await asUser.mutation(api.projects.create, {
         title: "Test Concert",
-        outputChannelCount: 12,
+        busConfig: { groups: 4, auxes: 8 },
       });
 
       const channels = await t.query(api.outputChannels.list, { projectId });
       expect(channels).toHaveLength(12);
+      // First 4 should be groups, next 8 should be auxes
+      expect(channels[0].busType).toBe("group");
+      expect(channels[0].busName).toBe("Grp 1");
+      expect(channels[4].busType).toBe("aux");
+      expect(channels[4].busName).toBe("Aux 1");
     });
 
     it("should accept optional fields", async () => {

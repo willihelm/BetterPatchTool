@@ -29,12 +29,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { Plus, Trash2, Box, ArrowRight, ArrowLeft, Eye, Grid3X3, List, Headphones, GripVertical, Settings, Package, Save } from "lucide-react";
 import Link from "next/link";
 import type { IODevice, Mixer } from "@/types/convex";
 import { IODeviceEditDialog } from "./io-device-edit-dialog";
 import { MixerSettingsDialog } from "./mixer-settings-dialog";
 import { AddFromInventoryDialog } from "./add-from-inventory-dialog";
+import { PresetPicker } from "@/components/shared/preset-picker";
+import {
+  MIXER_PRESETS,
+  IO_DEVICE_PRESETS,
+  MIXER_MANUFACTURERS,
+  IO_DEVICE_MANUFACTURERS,
+  type MixerPreset,
+  type IODevicePreset,
+} from "@/lib/equipment-presets";
+import { busConfigTotal, type BusConfig } from "@/lib/bus-utils";
+import { BusConfigFields } from "@/components/shared/bus-config-fields";
 import {
   DndContext,
   closestCenter,
@@ -285,12 +302,13 @@ export function IOOverview({ projectId }: IOOverviewProps) {
   const [isMixerDialogOpen, setIsMixerDialogOpen] = useState(false);
   const [inventoryDialogType, setInventoryDialogType] = useState<"io-device" | "mixer" | null>(null);
   const [mixerSettingsTarget, setMixerSettingsTarget] = useState<Mixer | null>(null);
+  const [ioDialogTab, setIoDialogTab] = useState("preset");
   const [newMixer, setNewMixer] = useState({
     name: "",
     type: "",
     stereoMode: "linked_mono" as "linked_mono" | "true_stereo",
     channelCount: 48,
-    outputChannelCount: 24,
+    busConfig: { auxes: 24 } as BusConfig,
   });
   const [newIODevice, setNewIODevice] = useState({
     name: "",
@@ -357,7 +375,7 @@ export function IOOverview({ projectId }: IOOverviewProps) {
       type: newMixer.type || undefined,
       stereoMode: newMixer.stereoMode,
       channelCount: newMixer.channelCount,
-      outputChannelCount: newMixer.outputChannelCount,
+      busConfig: newMixer.busConfig,
       designation: getNextDesignation(mixers),
     });
 
@@ -366,7 +384,7 @@ export function IOOverview({ projectId }: IOOverviewProps) {
       type: "",
       stereoMode: "linked_mono",
       channelCount: 48,
-      outputChannelCount: 24,
+      busConfig: { auxes: 24 },
     });
     setIsMixerDialogOpen(false);
   };
@@ -447,72 +465,97 @@ export function IOOverview({ projectId }: IOOverviewProps) {
                   Add a new mixer to the project. Input and output channels will be auto-generated.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="mixer-name">Name</Label>
-                  <Input
-                    id="mixer-name"
-                    placeholder="e.g. Monitor, FOH, Broadcast"
-                    value={newMixer.name}
-                    onChange={(e) => setNewMixer({ ...newMixer, name: e.target.value })}
+              <Tabs defaultValue="preset">
+                <TabsList className="w-full">
+                  <TabsTrigger value="preset" className="flex-1">From Preset</TabsTrigger>
+                  <TabsTrigger value="manual" className="flex-1">Manual</TabsTrigger>
+                </TabsList>
+                <TabsContent value="preset">
+                  <PresetPicker
+                    presets={MIXER_PRESETS}
+                    manufacturers={MIXER_MANUFACTURERS}
+                    searchPlaceholder="Search mixers..."
+                    onSelect={async (preset: MixerPreset) => {
+                      if (!mixers) return;
+                      await createMixer({
+                        projectId,
+                        name: preset.model,
+                        type: `${preset.manufacturer} ${preset.model}`,
+                        stereoMode: preset.stereoMode,
+                        channelCount: preset.channelCount,
+                        busConfig: preset.busConfig,
+                        designation: getNextDesignation(mixers),
+                      });
+                      setIsMixerDialogOpen(false);
+                    }}
+                    renderItem={(preset: MixerPreset) => (
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">{preset.model}</span>
+                        <span className="text-xs text-muted-foreground">{preset.channelCount}ch / {busConfigTotal(preset.busConfig)} bus</span>
+                      </div>
+                    )}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="mixer-type">Console Type (optional)</Label>
-                  <Input
-                    id="mixer-type"
-                    placeholder="e.g. Yamaha CL5, DiGiCo SD12"
-                    value={newMixer.type}
-                    onChange={(e) => setNewMixer({ ...newMixer, type: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Stereo Mode</Label>
-                  <Select
-                    value={newMixer.stereoMode}
-                    onValueChange={(v) => setNewMixer({ ...newMixer, stereoMode: v as "linked_mono" | "true_stereo" })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="linked_mono">Linked Mono</SelectItem>
-                      <SelectItem value="true_stereo">True Stereo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="mixer-ch-count">Input Channels</Label>
-                    <Input
-                      id="mixer-ch-count"
-                      type="number"
-                      min={1}
-                      max={256}
-                      value={newMixer.channelCount}
-                      onChange={(e) => setNewMixer({ ...newMixer, channelCount: parseInt(e.target.value) || 48 })}
+                </TabsContent>
+                <TabsContent value="manual">
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="mixer-name">Name</Label>
+                      <Input
+                        id="mixer-name"
+                        placeholder="e.g. Monitor, FOH, Broadcast"
+                        value={newMixer.name}
+                        onChange={(e) => setNewMixer({ ...newMixer, name: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="mixer-type">Console Type (optional)</Label>
+                      <Input
+                        id="mixer-type"
+                        placeholder="e.g. Yamaha CL5, DiGiCo SD12"
+                        value={newMixer.type}
+                        onChange={(e) => setNewMixer({ ...newMixer, type: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Stereo Mode</Label>
+                      <Select
+                        value={newMixer.stereoMode}
+                        onValueChange={(v) => setNewMixer({ ...newMixer, stereoMode: v as "linked_mono" | "true_stereo" })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="linked_mono">Linked Mono</SelectItem>
+                          <SelectItem value="true_stereo">True Stereo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="mixer-ch-count">Input Channels</Label>
+                      <Input
+                        id="mixer-ch-count"
+                        type="number"
+                        min={1}
+                        max={256}
+                        value={newMixer.channelCount}
+                        onChange={(e) => setNewMixer({ ...newMixer, channelCount: parseInt(e.target.value) || 48 })}
+                      />
+                    </div>
+                    <BusConfigFields
+                      value={newMixer.busConfig}
+                      onChange={(busConfig) => setNewMixer({ ...newMixer, busConfig })}
                     />
+                    <Button
+                      onClick={handleCreateMixer}
+                      className="w-full"
+                      disabled={!newMixer.name}
+                    >
+                      Create Mixer
+                    </Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="mixer-out-count">Output Channels</Label>
-                    <Input
-                      id="mixer-out-count"
-                      type="number"
-                      min={1}
-                      max={256}
-                      value={newMixer.outputChannelCount}
-                      onChange={(e) => setNewMixer({ ...newMixer, outputChannelCount: parseInt(e.target.value) || 24 })}
-                    />
-                  </div>
-                </div>
-                <Button
-                  onClick={handleCreateMixer}
-                  className="w-full"
-                  disabled={!newMixer.name}
-                >
-                  Create Mixer
-                </Button>
-              </div>
+                </TabsContent>
+              </Tabs>
             </DialogContent>
           </Dialog>
           </div>
@@ -566,7 +609,10 @@ export function IOOverview({ projectId }: IOOverviewProps) {
             <Package className="mr-2 h-4 w-4" />
             From Inventory
           </Button>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (open) setIoDialogTab("preset");
+        }}>
           <DialogTrigger asChild>
             <Button size="sm">
               <Plus className="mr-2 h-4 w-4" />
@@ -580,215 +626,251 @@ export function IOOverview({ projectId }: IOOverviewProps) {
                 Add a new IO device to the project.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="io-name">Name</Label>
-                <Input
-                  id="io-name"
-                  placeholder="e.g. Stage Left"
-                  value={newIODevice.name}
-                  onChange={(e) =>
-                    setNewIODevice({ ...newIODevice, name: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="io-short">Short Name (for port prefix)</Label>
-                <Input
-                  id="io-short"
-                  placeholder="e.g. SL"
-                  value={newIODevice.shortName}
-                  onChange={(e) =>
-                    setNewIODevice({ ...newIODevice, shortName: e.target.value.toUpperCase() })
-                  }
-                  maxLength={4}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Ports will be named as {newIODevice.shortName || "XX"}-I1, {newIODevice.shortName || "XX"}-O1, etc.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label>Device Type</Label>
-                <Select
-                  value={newIODevice.deviceType}
-                  onValueChange={(value: "stagebox" | "generic") =>
-                    setNewIODevice({ ...newIODevice, deviceType: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="stagebox">
-                      <div className="flex items-center gap-2">
-                        <Grid3X3 className="h-4 w-4" />
-                        <span>Stagebox</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="generic">
-                      <div className="flex items-center gap-2">
-                        <List className="h-4 w-4" />
-                        <span>Generic (List only)</span>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {newIODevice.deviceType === "stagebox"
-                    ? "Shows in the Stageboxes tab with horizontal grid layout"
-                    : "Only shows in IO Devices list view"}
-                </p>
-              </div>
-              {newIODevice.deviceType === "stagebox" && (
-                <div className="space-y-2">
-                  <Label htmlFor="io-portsPerRow">Ports per Row</Label>
-                  <Select
-                    value={newIODevice.portsPerRow.toString()}
-                    onValueChange={(value) =>
-                      setNewIODevice({ ...newIODevice, portsPerRow: parseInt(value) })
-                    }
-                  >
-                    <SelectTrigger id="io-portsPerRow">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="8">8 ports</SelectItem>
-                      <SelectItem value="12">12 ports</SelectItem>
-                      <SelectItem value="16">16 ports</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label>Color</Label>
-                <div className="flex gap-2 flex-wrap">
-                  {PRESET_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      className={`w-8 h-8 rounded-full border-2 transition-all ${
-                        newIODevice.color === color
-                          ? "border-foreground scale-110"
-                          : "border-transparent"
-                      }`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => setNewIODevice({ ...newIODevice, color })}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="io-inputs">Number of Inputs</Label>
-                  <Input
-                    id="io-inputs"
-                    type="number"
-                    min={1}
-                    max={96}
-                    value={newIODevice.inputCount}
-                    onChange={(e) =>
-                      setNewIODevice({
-                        ...newIODevice,
-                        inputCount: parseInt(e.target.value) || 1,
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="io-outputs">Number of Outputs</Label>
-                  <Input
-                    id="io-outputs"
-                    type="number"
-                    min={1}
-                    max={96}
-                    value={newIODevice.outputCount}
-                    onChange={(e) =>
-                      setNewIODevice({
-                        ...newIODevice,
-                        outputCount: parseInt(e.target.value) || 1,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="io-headphones">Headphone Outputs (stereo pairs)</Label>
-                <Input
-                  id="io-headphones"
-                  type="number"
-                  min={0}
-                  max={16}
-                  value={newIODevice.headphoneOutputCount}
-                  onChange={(e) =>
+            <Tabs value={ioDialogTab} onValueChange={setIoDialogTab}>
+              <TabsList className="w-full">
+                <TabsTrigger value="preset" className="flex-1">From Preset</TabsTrigger>
+                <TabsTrigger value="manual" className="flex-1">Manual</TabsTrigger>
+              </TabsList>
+              <TabsContent value="preset">
+                <PresetPicker
+                  presets={IO_DEVICE_PRESETS}
+                  manufacturers={IO_DEVICE_MANUFACTURERS}
+                  searchPlaceholder="Search IO devices..."
+                  onSelect={(preset: IODevicePreset) => {
                     setNewIODevice({
                       ...newIODevice,
-                      headphoneOutputCount: parseInt(e.target.value) || 0,
-                    })
-                  }
+                      name: preset.model,
+                      shortName: preset.shortName,
+                      inputCount: preset.inputCount,
+                      outputCount: preset.outputCount,
+                      headphoneOutputCount: preset.headphoneOutputCount ?? 0,
+                      aesInputCount: preset.aesInputCount ?? 0,
+                      aesOutputCount: preset.aesOutputCount ?? 0,
+                      deviceType: preset.deviceType,
+                      portsPerRow: preset.portsPerRow ?? 12,
+                    });
+                    setIoDialogTab("manual");
+                  }}
+                  renderItem={(preset: IODevicePreset) => (
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm">{preset.model}</span>
+                      <span className="text-xs text-muted-foreground">{preset.inputCount}in / {preset.outputCount}out</span>
+                    </div>
+                  )}
                 />
-                {newIODevice.headphoneOutputCount > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    HP ports: {Array.from({ length: newIODevice.headphoneOutputCount }, (_, i) =>
-                      `${newIODevice.shortName || "XX"}-HP${i + 1}L, ${newIODevice.shortName || "XX"}-HP${i + 1}R`
-                    ).join(", ")}
-                  </p>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="io-aes-inputs">AES Inputs (stereo pairs)</Label>
-                  <Input
-                    id="io-aes-inputs"
-                    type="number"
-                    min={0}
-                    max={16}
-                    value={newIODevice.aesInputCount}
-                    onChange={(e) =>
-                      setNewIODevice({
-                        ...newIODevice,
-                        aesInputCount: parseInt(e.target.value) || 0,
-                      })
-                    }
-                  />
-                  {newIODevice.aesInputCount > 0 && (
+              </TabsContent>
+              <TabsContent value="manual">
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="io-name">Name</Label>
+                    <Input
+                      id="io-name"
+                      placeholder="e.g. Stage Left"
+                      value={newIODevice.name}
+                      onChange={(e) =>
+                        setNewIODevice({ ...newIODevice, name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="io-short">Short Name (for port prefix)</Label>
+                    <Input
+                      id="io-short"
+                      placeholder="e.g. SL"
+                      value={newIODevice.shortName}
+                      onChange={(e) =>
+                        setNewIODevice({ ...newIODevice, shortName: e.target.value.toUpperCase() })
+                      }
+                      maxLength={4}
+                    />
                     <p className="text-xs text-muted-foreground">
-                      {Array.from({ length: newIODevice.aesInputCount }, (_, i) =>
-                        `${newIODevice.shortName || "XX"}-AES${i + 1}L/R`
-                      ).join(", ")}
+                      Ports will be named as {newIODevice.shortName || "XX"}-I1, {newIODevice.shortName || "XX"}-O1, etc.
                     </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="io-aes-outputs">AES Outputs (stereo pairs)</Label>
-                  <Input
-                    id="io-aes-outputs"
-                    type="number"
-                    min={0}
-                    max={16}
-                    value={newIODevice.aesOutputCount}
-                    onChange={(e) =>
-                      setNewIODevice({
-                        ...newIODevice,
-                        aesOutputCount: parseInt(e.target.value) || 0,
-                      })
-                    }
-                  />
-                  {newIODevice.aesOutputCount > 0 && (
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Device Type</Label>
+                    <Select
+                      value={newIODevice.deviceType}
+                      onValueChange={(value: "stagebox" | "generic") =>
+                        setNewIODevice({ ...newIODevice, deviceType: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="stagebox">
+                          <div className="flex items-center gap-2">
+                            <Grid3X3 className="h-4 w-4" />
+                            <span>Stagebox</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="generic">
+                          <div className="flex items-center gap-2">
+                            <List className="h-4 w-4" />
+                            <span>Generic (List only)</span>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                     <p className="text-xs text-muted-foreground">
-                      {Array.from({ length: newIODevice.aesOutputCount }, (_, i) =>
-                        `${newIODevice.shortName || "XX"}-AESO${i + 1}L/R`
-                      ).join(", ")}
+                      {newIODevice.deviceType === "stagebox"
+                        ? "Shows in the Stageboxes tab with horizontal grid layout"
+                        : "Only shows in IO Devices list view"}
                     </p>
+                  </div>
+                  {newIODevice.deviceType === "stagebox" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="io-portsPerRow">Ports per Row</Label>
+                      <Select
+                        value={newIODevice.portsPerRow.toString()}
+                        onValueChange={(value) =>
+                          setNewIODevice({ ...newIODevice, portsPerRow: parseInt(value) })
+                        }
+                      >
+                        <SelectTrigger id="io-portsPerRow">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="8">8 ports</SelectItem>
+                          <SelectItem value="12">12 ports</SelectItem>
+                          <SelectItem value="16">16 ports</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   )}
+                  <div className="space-y-2">
+                    <Label>Color</Label>
+                    <div className="flex gap-2 flex-wrap">
+                      {PRESET_COLORS.map((color) => (
+                        <button
+                          key={color}
+                          className={`w-8 h-8 rounded-full border-2 transition-all ${
+                            newIODevice.color === color
+                              ? "border-foreground scale-110"
+                              : "border-transparent"
+                          }`}
+                          style={{ backgroundColor: color }}
+                          onClick={() => setNewIODevice({ ...newIODevice, color })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="io-inputs">Number of Inputs</Label>
+                      <Input
+                        id="io-inputs"
+                        type="number"
+                        min={1}
+                        max={96}
+                        value={newIODevice.inputCount}
+                        onChange={(e) =>
+                          setNewIODevice({
+                            ...newIODevice,
+                            inputCount: parseInt(e.target.value) || 1,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="io-outputs">Number of Outputs</Label>
+                      <Input
+                        id="io-outputs"
+                        type="number"
+                        min={1}
+                        max={96}
+                        value={newIODevice.outputCount}
+                        onChange={(e) =>
+                          setNewIODevice({
+                            ...newIODevice,
+                            outputCount: parseInt(e.target.value) || 1,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="io-headphones">Headphone Outputs (stereo pairs)</Label>
+                    <Input
+                      id="io-headphones"
+                      type="number"
+                      min={0}
+                      max={16}
+                      value={newIODevice.headphoneOutputCount}
+                      onChange={(e) =>
+                        setNewIODevice({
+                          ...newIODevice,
+                          headphoneOutputCount: parseInt(e.target.value) || 0,
+                        })
+                      }
+                    />
+                    {newIODevice.headphoneOutputCount > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        HP ports: {Array.from({ length: newIODevice.headphoneOutputCount }, (_, i) =>
+                          `${newIODevice.shortName || "XX"}-HP${i + 1}L, ${newIODevice.shortName || "XX"}-HP${i + 1}R`
+                        ).join(", ")}
+                      </p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="io-aes-inputs">AES Inputs (stereo pairs)</Label>
+                      <Input
+                        id="io-aes-inputs"
+                        type="number"
+                        min={0}
+                        max={16}
+                        value={newIODevice.aesInputCount}
+                        onChange={(e) =>
+                          setNewIODevice({
+                            ...newIODevice,
+                            aesInputCount: parseInt(e.target.value) || 0,
+                          })
+                        }
+                      />
+                      {newIODevice.aesInputCount > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          {Array.from({ length: newIODevice.aesInputCount }, (_, i) =>
+                            `${newIODevice.shortName || "XX"}-AES${i + 1}L/R`
+                          ).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="io-aes-outputs">AES Outputs (stereo pairs)</Label>
+                      <Input
+                        id="io-aes-outputs"
+                        type="number"
+                        min={0}
+                        max={16}
+                        value={newIODevice.aesOutputCount}
+                        onChange={(e) =>
+                          setNewIODevice({
+                            ...newIODevice,
+                            aesOutputCount: parseInt(e.target.value) || 0,
+                          })
+                        }
+                      />
+                      {newIODevice.aesOutputCount > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          {Array.from({ length: newIODevice.aesOutputCount }, (_, i) =>
+                            `${newIODevice.shortName || "XX"}-AESO${i + 1}L/R`
+                          ).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleCreate}
+                    className="w-full"
+                    disabled={!newIODevice.name || !newIODevice.shortName}
+                  >
+                    Create IO Device
+                  </Button>
                 </div>
-              </div>
-              <Button
-                onClick={handleCreate}
-                className="w-full"
-                disabled={!newIODevice.name || !newIODevice.shortName}
-              >
-                Create IO Device
-              </Button>
-            </div>
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
         </div>

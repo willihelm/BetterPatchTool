@@ -1,6 +1,51 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
+type BusType = "group" | "aux" | "fx" | "matrix" | "master" | "cue";
+
+interface BusConfig {
+  groups?: number;
+  auxes?: number;
+  fx?: number;
+  matrices?: number;
+  masters?: number;
+  cue?: number;
+}
+
+const busConfigValidator = v.optional(
+  v.object({
+    groups: v.optional(v.number()),
+    auxes: v.optional(v.number()),
+    fx: v.optional(v.number()),
+    matrices: v.optional(v.number()),
+    masters: v.optional(v.number()),
+    cue: v.optional(v.number()),
+  })
+);
+
+const BUS_ENTRIES: Array<{ key: keyof BusConfig; busType: BusType; label: string }> = [
+  { key: "groups", busType: "group", label: "Grp" },
+  { key: "auxes", busType: "aux", label: "Aux" },
+  { key: "fx", busType: "fx", label: "FX" },
+  { key: "matrices", busType: "matrix", label: "Mtx" },
+  { key: "masters", busType: "master", label: "Master" },
+  { key: "cue", busType: "cue", label: "Cue" },
+];
+
+function generateBusChannelList(busConfig: BusConfig): Array<{ busType: BusType; busName: string }> {
+  const channels: Array<{ busType: BusType; busName: string }> = [];
+  for (const { key, busType, label } of BUS_ENTRIES) {
+    const count = busConfig[key] ?? 0;
+    if (count <= 0) continue;
+    for (let i = 1; i <= count; i++) {
+      const busName =
+        count === 1 && (busType === "master" || busType === "cue") ? label : `${label} ${i}`;
+      channels.push({ busType, busName });
+    }
+  }
+  return channels;
+}
+
 // Alle Output-Kanäle eines Projekts/Mixers abrufen (sortiert)
 export const list = query({
   args: {
@@ -33,6 +78,10 @@ export const get = query({
 export const create = mutation({
   args: {
     projectId: v.id("projects"),
+    busType: v.optional(v.union(
+      v.literal("group"), v.literal("aux"), v.literal("fx"),
+      v.literal("matrix"), v.literal("master"), v.literal("cue")
+    )),
     busName: v.string(),
     destination: v.string(),
     mixerId: v.optional(v.id("mixers")),
@@ -63,6 +112,7 @@ export const create = mutation({
     return await ctx.db.insert("outputChannels", {
       projectId: args.projectId,
       order: maxOrder + 1,
+      busType: args.busType,
       busName: args.busName,
       destination: args.destination,
       mixerId: args.mixerId,
@@ -82,6 +132,10 @@ export const create = mutation({
 export const update = mutation({
   args: {
     channelId: v.id("outputChannels"),
+    busType: v.optional(v.union(
+      v.literal("group"), v.literal("aux"), v.literal("fx"),
+      v.literal("matrix"), v.literal("master"), v.literal("cue")
+    )),
     busName: v.optional(v.string()),
     destination: v.optional(v.string()),
     mixerId: v.optional(v.id("mixers")),
@@ -155,6 +209,71 @@ export const generateChannelsUpTo = mutation({
     }
 
     return { added: channelsToAdd, total: args.targetCount };
+  },
+});
+
+// Bus-Konfiguration für einen Mixer anwenden (Gruppen/Aux/FX/Matrix/Master/Cue)
+export const applyBusConfigToMixer = mutation({
+  args: {
+    projectId: v.id("projects"),
+    mixerId: v.id("mixers"),
+    busConfig: busConfigValidator,
+  },
+  handler: async (ctx, args) => {
+    const mixer = await ctx.db.get(args.mixerId);
+    if (!mixer || mixer.projectId !== args.projectId) {
+      throw new Error("Mixer not found");
+    }
+
+    const effectiveConfig: BusConfig = args.busConfig ?? { auxes: 24 };
+    const desiredBusChannels = generateBusChannelList(effectiveConfig);
+
+    const existingChannels = await ctx.db
+      .query("outputChannels")
+      .withIndex("by_mixer_and_order", (q) => q.eq("mixerId", args.mixerId))
+      .collect();
+
+    // Sort existing channels by order to get a stable sequence
+    const sortedExisting = existingChannels.sort((a, b) => a.order - b.order);
+
+    const overlapCount = Math.min(sortedExisting.length, desiredBusChannels.length);
+
+    // Update existing channels in-place where possible to preserve routing/patch data
+    for (let i = 0; i < overlapCount; i++) {
+      const existing = sortedExisting[i];
+      const desired = desiredBusChannels[i];
+      await ctx.db.patch(existing._id, {
+        busType: desired.busType,
+        busName: desired.busName,
+      });
+    }
+
+    // Remove surplus channels if the new config has fewer buses
+    if (sortedExisting.length > desiredBusChannels.length) {
+      for (let i = desiredBusChannels.length; i < sortedExisting.length; i++) {
+        await ctx.db.delete(sortedExisting[i]._id);
+      }
+    }
+
+    // Insert additional channels if the new config has more buses
+    if (desiredBusChannels.length > sortedExisting.length) {
+      const maxOrder =
+        sortedExisting.length > 0
+          ? Math.max(...sortedExisting.map((c) => c.order))
+          : 0;
+
+      for (let i = sortedExisting.length; i < desiredBusChannels.length; i++) {
+        const desired = desiredBusChannels[i];
+        await ctx.db.insert("outputChannels", {
+          projectId: args.projectId,
+          mixerId: args.mixerId,
+          order: maxOrder + (i - sortedExisting.length) + 1,
+          busType: desired.busType,
+          busName: desired.busName,
+          destination: "",
+        });
+      }
+    }
   },
 });
 

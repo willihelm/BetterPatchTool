@@ -37,6 +37,17 @@ import {
 } from "@/components/ui/tabs";
 import { Plus, Trash2, Pencil, Box, ArrowRight, ArrowLeft, Headphones, Grid3X3, List } from "lucide-react";
 import { AppHeader } from "@/components/shared/app-header";
+import { PresetPicker } from "@/components/shared/preset-picker";
+import {
+  MIXER_PRESETS,
+  IO_DEVICE_PRESETS,
+  MIXER_MANUFACTURERS,
+  IO_DEVICE_MANUFACTURERS,
+  type MixerPreset,
+  type IODevicePreset,
+} from "@/lib/equipment-presets";
+import { busConfigTotal, formatBusConfig, type BusConfig } from "@/lib/bus-utils";
+import { BusConfigFields } from "@/components/shared/bus-config-fields";
 import type { InventoryIODevice, InventoryMixer } from "@/types/convex";
 
 const PRESET_COLORS = [
@@ -83,6 +94,7 @@ function IODevicesTab({ devices }: { devices: InventoryIODevice[] | undefined })
   const updateDevice = useMutation(api.inventoryIODevices.update);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createTab, setCreateTab] = useState("preset");
   const [editTarget, setEditTarget] = useState<InventoryIODevice | null>(null);
   const [form, setForm] = useState(getDefaultIOForm());
 
@@ -146,7 +158,7 @@ function IODevicesTab({ devices }: { devices: InventoryIODevice[] | undefined })
       <div className="flex justify-end">
         <Dialog open={isCreateOpen} onOpenChange={(open) => {
           setIsCreateOpen(open);
-          if (open) setForm(getDefaultIOForm());
+          if (open) { setForm(getDefaultIOForm()); setCreateTab("preset"); }
         }}>
           <DialogTrigger asChild>
             <Button size="sm">
@@ -159,10 +171,46 @@ function IODevicesTab({ devices }: { devices: InventoryIODevice[] | undefined })
               <DialogTitle>New Inventory IO Device</DialogTitle>
               <DialogDescription>Save an IO device configuration to your inventory.</DialogDescription>
             </DialogHeader>
-            <IODeviceForm form={form} setForm={setForm} />
-            <Button onClick={handleCreate} className="w-full" disabled={!form.name || !form.shortName}>
-              Save to Inventory
-            </Button>
+            <Tabs value={createTab} onValueChange={setCreateTab}>
+              <TabsList className="w-full">
+                <TabsTrigger value="preset" className="flex-1">From Preset</TabsTrigger>
+                <TabsTrigger value="manual" className="flex-1">Manual</TabsTrigger>
+              </TabsList>
+              <TabsContent value="preset">
+                <PresetPicker
+                  presets={IO_DEVICE_PRESETS}
+                  manufacturers={IO_DEVICE_MANUFACTURERS}
+                  searchPlaceholder="Search IO devices..."
+                  onSelect={(preset: IODevicePreset) => {
+                    setForm({
+                      ...form,
+                      name: preset.model,
+                      shortName: preset.shortName,
+                      inputCount: preset.inputCount,
+                      outputCount: preset.outputCount,
+                      headphoneOutputCount: preset.headphoneOutputCount ?? 0,
+                      aesInputCount: preset.aesInputCount ?? 0,
+                      aesOutputCount: preset.aesOutputCount ?? 0,
+                      deviceType: preset.deviceType,
+                      portsPerRow: preset.portsPerRow ?? 12,
+                    });
+                    setCreateTab("manual");
+                  }}
+                  renderItem={(preset: IODevicePreset) => (
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm">{preset.model}</span>
+                      <span className="text-xs text-muted-foreground">{preset.inputCount}in / {preset.outputCount}out</span>
+                    </div>
+                  )}
+                />
+              </TabsContent>
+              <TabsContent value="manual">
+                <IODeviceForm form={form} setForm={setForm} />
+                <Button onClick={handleCreate} className="w-full" disabled={!form.name || !form.shortName}>
+                  Save to Inventory
+                </Button>
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
       </div>
@@ -365,6 +413,7 @@ function MixersTab({ mixers }: { mixers: InventoryMixer[] | undefined }) {
   const updateMixer = useMutation(api.inventoryMixers.update);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createTab, setCreateTab] = useState("preset");
   const [editTarget, setEditTarget] = useState<InventoryMixer | null>(null);
   const [form, setForm] = useState(getDefaultMixerForm());
 
@@ -374,7 +423,7 @@ function MixersTab({ mixers }: { mixers: InventoryMixer[] | undefined }) {
       type: "",
       stereoMode: "linked_mono" as "linked_mono" | "true_stereo",
       channelCount: 48,
-      outputChannelCount: 24,
+      busConfig: { auxes: 24 } as BusConfig,
     };
   }
 
@@ -385,7 +434,7 @@ function MixersTab({ mixers }: { mixers: InventoryMixer[] | undefined }) {
       type: form.type || undefined,
       stereoMode: form.stereoMode,
       channelCount: form.channelCount,
-      outputChannelCount: form.outputChannelCount,
+      busConfig: form.busConfig,
     });
     setForm(getDefaultMixerForm());
     setIsCreateOpen(false);
@@ -399,7 +448,7 @@ function MixersTab({ mixers }: { mixers: InventoryMixer[] | undefined }) {
       type: form.type || undefined,
       stereoMode: form.stereoMode,
       channelCount: form.channelCount,
-      outputChannelCount: form.outputChannelCount,
+      busConfig: form.busConfig,
     });
     setEditTarget(null);
   };
@@ -410,7 +459,7 @@ function MixersTab({ mixers }: { mixers: InventoryMixer[] | undefined }) {
       type: mixer.type ?? "",
       stereoMode: mixer.stereoMode,
       channelCount: mixer.channelCount,
-      outputChannelCount: mixer.outputChannelCount ?? 24,
+      busConfig: mixer.busConfig ?? { auxes: 24 },
     });
     setEditTarget(mixer);
   };
@@ -424,7 +473,7 @@ function MixersTab({ mixers }: { mixers: InventoryMixer[] | undefined }) {
       <div className="flex justify-end">
         <Dialog open={isCreateOpen} onOpenChange={(open) => {
           setIsCreateOpen(open);
-          if (open) setForm(getDefaultMixerForm());
+          if (open) { setForm(getDefaultMixerForm()); setCreateTab("preset"); }
         }}>
           <DialogTrigger asChild>
             <Button size="sm">
@@ -437,10 +486,41 @@ function MixersTab({ mixers }: { mixers: InventoryMixer[] | undefined }) {
               <DialogTitle>New Inventory Mixer</DialogTitle>
               <DialogDescription>Save a mixer configuration to your inventory.</DialogDescription>
             </DialogHeader>
-            <MixerForm form={form} setForm={setForm} />
-            <Button onClick={handleCreate} className="w-full" disabled={!form.name}>
-              Save to Inventory
-            </Button>
+            <Tabs value={createTab} onValueChange={setCreateTab}>
+              <TabsList className="w-full">
+                <TabsTrigger value="preset" className="flex-1">From Preset</TabsTrigger>
+                <TabsTrigger value="manual" className="flex-1">Manual</TabsTrigger>
+              </TabsList>
+              <TabsContent value="preset">
+                <PresetPicker
+                  presets={MIXER_PRESETS}
+                  manufacturers={MIXER_MANUFACTURERS}
+                  searchPlaceholder="Search mixers..."
+                  onSelect={async (preset: MixerPreset) => {
+                    await createMixer({
+                      name: preset.model,
+                      type: `${preset.manufacturer} ${preset.model}`,
+                      stereoMode: preset.stereoMode,
+                      channelCount: preset.channelCount,
+                      busConfig: preset.busConfig,
+                    });
+                    setIsCreateOpen(false);
+                  }}
+                  renderItem={(preset: MixerPreset) => (
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm">{preset.model}</span>
+                      <span className="text-xs text-muted-foreground">{preset.channelCount}ch / {busConfigTotal(preset.busConfig)} bus</span>
+                    </div>
+                  )}
+                />
+              </TabsContent>
+              <TabsContent value="manual">
+                <MixerForm form={form} setForm={setForm} />
+                <Button onClick={handleCreate} className="w-full" disabled={!form.name}>
+                  Save to Inventory
+                </Button>
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
       </div>
@@ -482,7 +562,7 @@ function MixersTab({ mixers }: { mixers: InventoryMixer[] | undefined }) {
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-3 text-sm text-muted-foreground mb-4">
-                  <span>{mixer.channelCount} in / {mixer.outputChannelCount ?? 24} out</span>
+                  <span>{mixer.channelCount}ch / {mixer.busConfig ? formatBusConfig(mixer.busConfig) : "24 Aux"}</span>
                   <span>&middot;</span>
                   <span>{mixer.stereoMode === "true_stereo" ? "True Stereo" : "Linked Mono"}</span>
                 </div>
@@ -515,7 +595,7 @@ interface MixerFormState {
   type: string;
   stereoMode: "linked_mono" | "true_stereo";
   channelCount: number;
-  outputChannelCount: number;
+  busConfig: BusConfig;
 }
 
 function MixerForm({ form, setForm }: { form: MixerFormState; setForm: (f: MixerFormState) => void }) {
@@ -541,18 +621,12 @@ function MixerForm({ form, setForm }: { form: MixerFormState; setForm: (f: Mixer
           </SelectContent>
         </Select>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Input Channels</Label>
-          <Input type="number" min={1} max={256} value={form.channelCount}
-            onChange={(e) => setForm({ ...form, channelCount: parseInt(e.target.value) || 48 })} />
-        </div>
-        <div className="space-y-2">
-          <Label>Output Channels</Label>
-          <Input type="number" min={1} max={256} value={form.outputChannelCount}
-            onChange={(e) => setForm({ ...form, outputChannelCount: parseInt(e.target.value) || 24 })} />
-        </div>
+      <div className="space-y-2">
+        <Label>Input Channels</Label>
+        <Input type="number" min={1} max={256} value={form.channelCount}
+          onChange={(e) => setForm({ ...form, channelCount: parseInt(e.target.value) || 48 })} />
       </div>
+      <BusConfigFields value={form.busConfig} onChange={(busConfig) => setForm({ ...form, busConfig })} />
     </div>
   );
 }

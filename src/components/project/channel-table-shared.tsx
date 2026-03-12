@@ -24,6 +24,7 @@ export interface InputChannelRow extends BaseChannelRow {
 
 export interface OutputChannelRow extends BaseChannelRow {
   rowNumber: number;
+  busType?: "group" | "aux" | "fx" | "matrix" | "master" | "cue";
   busName: string;
   destination: string;
   ampProcessor: string;

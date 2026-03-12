@@ -16,6 +16,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BusConfigFields } from "@/components/shared/bus-config-fields";
+import type { BusConfig } from "@/lib/bus-utils";
 
 export function NewProjectContent() {
   const router = useRouter();
@@ -25,7 +27,7 @@ export function NewProjectContent() {
   const [date, setDate] = useState("");
   const [venue, setVenue] = useState("");
   const [channelCount, setChannelCount] = useState("48");
-  const [outputChannelCount, setOutputChannelCount] = useState("24");
+  const [busConfig, setBusConfig] = useState<BusConfig>({ auxes: 24 } as BusConfig);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,7 +42,7 @@ export function NewProjectContent() {
         date: date || undefined,
         venue: venue.trim() || undefined,
         channelCount: parseInt(channelCount) || 48,
-        outputChannelCount: parseInt(outputChannelCount) || 24,
+        busConfig,
       });
       router.push(`/project/${projectId}`);
     } catch (error) {
@@ -118,34 +120,21 @@ export function NewProjectContent() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="channelCount">Input Channels</Label>
-                  <Input
-                    id="channelCount"
-                    type="number"
-                    min="1"
-                    max="256"
-                    value={channelCount}
-                    onChange={(e) => setChannelCount(e.target.value)}
-                    placeholder="48"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="outputChannelCount">Output Channels</Label>
-                  <Input
-                    id="outputChannelCount"
-                    type="number"
-                    min="1"
-                    max="256"
-                    value={outputChannelCount}
-                    onChange={(e) => setOutputChannelCount(e.target.value)}
-                    placeholder="24"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="channelCount">Input Channels</Label>
+                <Input
+                  id="channelCount"
+                  type="number"
+                  min="1"
+                  max="256"
+                  value={channelCount}
+                  onChange={(e) => setChannelCount(e.target.value)}
+                  placeholder="48"
+                />
               </div>
+              <BusConfigFields value={busConfig} onChange={setBusConfig} />
               <p className="text-sm text-muted-foreground -mt-4">
-                Number of channels to create (can be changed later)
+                Channel and bus counts can be changed later.
               </p>
 
               <div className="flex gap-4 pt-4">

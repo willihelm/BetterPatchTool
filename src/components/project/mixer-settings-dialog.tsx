@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/select";
 import { Settings } from "lucide-react";
 import type { Mixer } from "@/types/convex";
+import { BusConfigFields } from "@/components/shared/bus-config-fields";
+import { busConfigTotal, type BusConfig, type BusType } from "@/lib/bus-utils";
 
 interface MixerSettingsDialogProps {
   projectId: Id<"projects">;
@@ -46,7 +48,7 @@ export function MixerSettingsDialog({
   const [type, setType] = useState(mixer.type || "");
   const [stereoMode, setStereoMode] = useState(mixer.stereoMode);
   const [inputChannelCount, setInputChannelCount] = useState(mixer.channelCount.toString());
-  const [outputChannelCount, setOutputChannelCount] = useState("0");
+  const [busConfig, setBusConfig] = useState<BusConfig>({ auxes: 24 });
   const [isLoading, setIsLoading] = useState(false);
 
   const mixerId = mixer._id as Id<"mixers">;
@@ -58,7 +60,7 @@ export function MixerSettingsDialog({
 
   const updateMixer = useMutation(api.mixers.update);
   const generateInputChannels = useMutation(api.inputChannels.generateChannelsUpTo);
-  const generateOutputChannels = useMutation(api.outputChannels.generateChannelsUpTo);
+  const applyBusConfigToMixer = useMutation(api.outputChannels.applyBusConfigToMixer);
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -67,15 +69,28 @@ export function MixerSettingsDialog({
       setType(mixer.type || "");
       setStereoMode(mixer.stereoMode);
       setInputChannelCount(mixer.channelCount.toString());
-      setOutputChannelCount(currentOutputChannelCount.toString());
+      // Reconstruct busConfig from existing output channels
+      if (outputChannels) {
+        const busTypeToConfigKey: Record<string, keyof BusConfig> = {
+          group: "groups", aux: "auxes", fx: "fx",
+          matrix: "matrices", master: "masters", cue: "cue",
+        };
+        const config: BusConfig = {};
+        for (const ch of outputChannels) {
+          const configKey = busTypeToConfigKey[ch.busType ?? "aux"] ?? "auxes";
+          config[configKey] = (config[configKey] ?? 0) + 1;
+        }
+        setBusConfig(Object.keys(config).length > 0 ? config : { auxes: currentOutputChannelCount });
+      }
     }
-  }, [open, mixer, currentOutputChannelCount]);
+  }, [open, mixer, currentOutputChannelCount, outputChannels]);
+
+  const newOutputTotal = busConfigTotal(busConfig);
 
   const handleSave = async () => {
     setIsLoading(true);
     try {
       const newInputCount = parseInt(inputChannelCount) || 48;
-      const newOutputCount = parseInt(outputChannelCount) || 24;
 
       // Update mixer settings
       await updateMixer({
@@ -94,15 +109,12 @@ export function MixerSettingsDialog({
           targetCount: newInputCount,
         });
       }
-
-      // Generate output channels up to the new count
-      if (newOutputCount > currentOutputChannelCount) {
-        await generateOutputChannels({
-          projectId,
-          mixerId,
-          targetCount: newOutputCount,
-        });
-      }
+      // Apply updated bus configuration to this mixer
+      await applyBusConfigToMixer({
+        projectId,
+        mixerId,
+        busConfig,
+      });
 
       setOpen(false);
     } catch (error) {
@@ -113,7 +125,7 @@ export function MixerSettingsDialog({
   };
 
   const inputsToAdd = Math.max(0, (parseInt(inputChannelCount) || 0) - currentInputChannelCount);
-  const outputsToAdd = Math.max(0, (parseInt(outputChannelCount) || 0) - currentOutputChannelCount);
+  const outputsToAdd = Math.max(0, newOutputTotal - currentOutputChannelCount);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -162,42 +174,30 @@ export function MixerSettingsDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="input-channel-count">Input Channels</Label>
-              <Input
-                id="input-channel-count"
-                type="number"
-                min="1"
-                max="256"
-                value={inputChannelCount}
-                onChange={(e) => setInputChannelCount(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Current: {currentInputChannelCount}
-                {inputsToAdd > 0 && (
-                  <span className="text-primary"> (+{inputsToAdd})</span>
-                )}
-              </p>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="output-channel-count">Output Channels</Label>
-              <Input
-                id="output-channel-count"
-                type="number"
-                min="1"
-                max="256"
-                value={outputChannelCount}
-                onChange={(e) => setOutputChannelCount(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Current: {currentOutputChannelCount}
-                {outputsToAdd > 0 && (
-                  <span className="text-primary"> (+{outputsToAdd})</span>
-                )}
-              </p>
-            </div>
+          <div className="grid gap-2">
+            <Label htmlFor="input-channel-count">Input Channels</Label>
+            <Input
+              id="input-channel-count"
+              type="number"
+              min="1"
+              max="256"
+              value={inputChannelCount}
+              onChange={(e) => setInputChannelCount(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Current: {currentInputChannelCount}
+              {inputsToAdd > 0 && (
+                <span className="text-primary"> (+{inputsToAdd})</span>
+              )}
+            </p>
           </div>
+          <BusConfigFields value={busConfig} onChange={setBusConfig} />
+          {outputsToAdd > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Current: {currentOutputChannelCount} buses
+              <span className="text-primary"> (+{outputsToAdd})</span>
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>

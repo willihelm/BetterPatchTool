@@ -17,7 +17,7 @@ describe("inventoryMixers", () => {
         type: "Yamaha CL5",
         stereoMode: "linked_mono",
         channelCount: 72,
-        outputChannelCount: 24,
+        busConfig: { auxes: 24 },
       });
 
       await asUser.mutation(api.inventoryMixers.create, {
@@ -114,7 +114,7 @@ describe("inventoryMixers", () => {
         type: "DiGiCo SD12",
         stereoMode: "true_stereo",
         channelCount: 48,
-        outputChannelCount: 24,
+        busConfig: { auxes: 24 },
       });
 
       const projectId = await asUser.mutation(api.projects.create, {

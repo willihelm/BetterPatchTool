@@ -123,6 +123,10 @@ export default defineSchema({
     projectId: v.id("projects"),
     order: v.number(),
     mixerId: v.optional(v.id("mixers")),
+    busType: v.optional(v.union(
+      v.literal("group"), v.literal("aux"), v.literal("fx"),
+      v.literal("matrix"), v.literal("master"), v.literal("cue")
+    )),
     busName: v.string(),
     ioPortId: v.optional(v.id("ioPorts")),
     // For True Stereo: second port
@@ -167,7 +171,14 @@ export default defineSchema({
     type: v.optional(v.string()),
     stereoMode: v.union(v.literal("linked_mono"), v.literal("true_stereo")),
     channelCount: v.number(),
-    outputChannelCount: v.optional(v.number()),
+    busConfig: v.optional(v.object({
+      groups: v.optional(v.number()),
+      auxes: v.optional(v.number()),
+      fx: v.optional(v.number()),
+      matrices: v.optional(v.number()),
+      masters: v.optional(v.number()),
+      cue: v.optional(v.number()),
+    })),
     order: v.optional(v.number()),
   })
     .index("by_user", ["userId"])

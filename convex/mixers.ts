@@ -1,6 +1,49 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
+const busTypeValidator = v.union(
+  v.literal("group"), v.literal("aux"), v.literal("fx"),
+  v.literal("matrix"), v.literal("master"), v.literal("cue")
+);
+
+const busConfigValidator = v.optional(v.object({
+  groups: v.optional(v.number()),
+  auxes: v.optional(v.number()),
+  fx: v.optional(v.number()),
+  matrices: v.optional(v.number()),
+  masters: v.optional(v.number()),
+  cue: v.optional(v.number()),
+}));
+
+type BusType = "group" | "aux" | "fx" | "matrix" | "master" | "cue";
+
+interface BusConfig {
+  groups?: number; auxes?: number; fx?: number;
+  matrices?: number; masters?: number; cue?: number;
+}
+
+const BUS_ENTRIES: Array<{ key: keyof BusConfig; busType: BusType; label: string }> = [
+  { key: "groups", busType: "group", label: "Grp" },
+  { key: "auxes", busType: "aux", label: "Aux" },
+  { key: "fx", busType: "fx", label: "FX" },
+  { key: "matrices", busType: "matrix", label: "Mtx" },
+  { key: "masters", busType: "master", label: "Master" },
+  { key: "cue", busType: "cue", label: "Cue" },
+];
+
+function generateBusChannelList(busConfig: BusConfig): Array<{ busType: BusType; busName: string }> {
+  const channels: Array<{ busType: BusType; busName: string }> = [];
+  for (const { key, busType, label } of BUS_ENTRIES) {
+    const count = busConfig[key] ?? 0;
+    if (count <= 0) continue;
+    for (let i = 1; i <= count; i++) {
+      const busName = count === 1 && (busType === "master" || busType === "cue") ? label : `${label} ${i}`;
+      channels.push({ busType, busName });
+    }
+  }
+  return channels;
+}
+
 // Get all mixers for a project (sorted by order)
 export const list = query({
   args: { projectId: v.id("projects") },
@@ -29,7 +72,7 @@ export const create = mutation({
     type: v.optional(v.string()),
     stereoMode: v.union(v.literal("linked_mono"), v.literal("true_stereo")),
     channelCount: v.number(),
-    outputChannelCount: v.optional(v.number()),
+    busConfig: busConfigValidator,
     designation: v.string(),
   },
   handler: async (ctx, args) => {
@@ -64,14 +107,16 @@ export const create = mutation({
       });
     }
 
-    // Auto-generate empty output channels
-    const outputCount = args.outputChannelCount ?? 24;
-    for (let i = 0; i < outputCount; i++) {
+    // Auto-generate output channels with bus types and pre-filled names
+    const config = args.busConfig ?? { auxes: 24 };
+    const busChannels = generateBusChannelList(config);
+    for (let i = 0; i < busChannels.length; i++) {
       await ctx.db.insert("outputChannels", {
         projectId: args.projectId,
         mixerId,
         order: i + 1,
-        busName: "",
+        busType: busChannels[i].busType,
+        busName: busChannels[i].busName,
         destination: "",
       });
     }

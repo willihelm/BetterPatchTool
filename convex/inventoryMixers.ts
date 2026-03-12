@@ -2,6 +2,44 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
+const busConfigValidator = v.optional(v.object({
+  groups: v.optional(v.number()),
+  auxes: v.optional(v.number()),
+  fx: v.optional(v.number()),
+  matrices: v.optional(v.number()),
+  masters: v.optional(v.number()),
+  cue: v.optional(v.number()),
+}));
+
+type BusType = "group" | "aux" | "fx" | "matrix" | "master" | "cue";
+
+interface BusConfig {
+  groups?: number; auxes?: number; fx?: number;
+  matrices?: number; masters?: number; cue?: number;
+}
+
+const BUS_ENTRIES: Array<{ key: keyof BusConfig; busType: BusType; label: string }> = [
+  { key: "groups", busType: "group", label: "Grp" },
+  { key: "auxes", busType: "aux", label: "Aux" },
+  { key: "fx", busType: "fx", label: "FX" },
+  { key: "matrices", busType: "matrix", label: "Mtx" },
+  { key: "masters", busType: "master", label: "Master" },
+  { key: "cue", busType: "cue", label: "Cue" },
+];
+
+function generateBusChannelList(busConfig: BusConfig): Array<{ busType: BusType; busName: string }> {
+  const channels: Array<{ busType: BusType; busName: string }> = [];
+  for (const { key, busType, label } of BUS_ENTRIES) {
+    const count = busConfig[key] ?? 0;
+    if (count <= 0) continue;
+    for (let i = 1; i <= count; i++) {
+      const busName = count === 1 && (busType === "master" || busType === "cue") ? label : `${label} ${i}`;
+      channels.push({ busType, busName });
+    }
+  }
+  return channels;
+}
+
 export const list = query({
   args: {},
   handler: async (ctx) => {
@@ -21,7 +59,7 @@ export const create = mutation({
     type: v.optional(v.string()),
     stereoMode: v.union(v.literal("linked_mono"), v.literal("true_stereo")),
     channelCount: v.number(),
-    outputChannelCount: v.optional(v.number()),
+    busConfig: busConfigValidator,
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -39,7 +77,7 @@ export const create = mutation({
       type: args.type,
       stereoMode: args.stereoMode,
       channelCount: args.channelCount,
-      outputChannelCount: args.outputChannelCount ?? 24,
+      busConfig: args.busConfig ?? { auxes: 24 },
       order: maxOrder + 1,
     });
   },
@@ -52,7 +90,7 @@ export const update = mutation({
     type: v.optional(v.string()),
     stereoMode: v.optional(v.union(v.literal("linked_mono"), v.literal("true_stereo"))),
     channelCount: v.optional(v.number()),
-    outputChannelCount: v.optional(v.number()),
+    busConfig: busConfigValidator,
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -135,14 +173,16 @@ export const copyToProject = mutation({
       });
     }
 
-    // Auto-generate empty output channels
-    const outputCount = invMixer.outputChannelCount ?? 24;
-    for (let i = 0; i < outputCount; i++) {
+    // Auto-generate output channels with bus types and pre-filled names
+    const config = invMixer.busConfig ?? { auxes: 24 };
+    const busChannels = generateBusChannelList(config);
+    for (let i = 0; i < busChannels.length; i++) {
       await ctx.db.insert("outputChannels", {
         projectId: args.projectId,
         mixerId,
         order: i + 1,
-        busName: "",
+        busType: busChannels[i].busType,
+        busName: busChannels[i].busName,
         destination: "",
       });
     }
@@ -166,13 +206,28 @@ export const saveFromProject = mutation({
       .collect();
     const maxOrder = existing.reduce((max, m) => Math.max(max, m.order ?? 0), 0);
 
+    // Count output channels by bus type from project data
+    const outputChannels = await ctx.db
+      .query("outputChannels")
+      .withIndex("by_mixer", (q) => q.eq("mixerId", args.mixerId))
+      .collect();
+    const busTypeToConfigKey: Record<string, string> = {
+      group: "groups", aux: "auxes", fx: "fx",
+      matrix: "matrices", master: "masters", cue: "cue",
+    };
+    const busConfig: Record<string, number> = {};
+    for (const ch of outputChannels) {
+      const configKey = busTypeToConfigKey[ch.busType ?? "aux"] ?? "auxes";
+      busConfig[configKey] = (busConfig[configKey] ?? 0) + 1;
+    }
+
     return await ctx.db.insert("inventoryMixers", {
       userId,
       name: mixer.name,
       type: mixer.type,
       stereoMode: mixer.stereoMode,
       channelCount: mixer.channelCount,
-      outputChannelCount: 24, // default, not stored on project mixer
+      busConfig: Object.keys(busConfig).length > 0 ? busConfig : { auxes: outputChannels.length || 24 },
       order: maxOrder + 1,
     });
   },

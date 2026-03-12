@@ -14,7 +14,7 @@ async function setupProject(
   const projectId = await asUser.mutation(api.projects.create, {
     title: "Snapshot Project",
     channelCount: 1,
-    outputChannelCount: 1,
+    busConfig: { auxes: 1 },
   });
 
   // Get the mixer that was auto-created

@@ -63,6 +63,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
     return channels.map((channel, index) => ({
       _id: channel._id,
       rowNumber: index + 1,
+      busType: channel.busType,
       ioPortId: channel.ioPortId,
       ioPortIdRight: channel.ioPortIdRight,
       isStereo: channel.isStereo,
@@ -189,10 +190,13 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
     {
       key: "rowNumber",
       name: "#",
-      width: 36,
+      width: 64,
       frozen: true,
       cellClass: "text-center font-mono text-sm",
       headerCellClass: "text-center",
+      renderCell: ({ row }: { row: OutputChannelRow }) => (
+        <span>{row.busName || row.rowNumber}</span>
+      ),
     },
     {
       key: "port",
