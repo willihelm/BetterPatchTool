@@ -5,7 +5,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -20,17 +19,14 @@ interface MixerSelectorProps {
 export function MixerSelector({ onOpenSettings }: MixerSelectorProps) {
   const { activeMixer, activeMixerId, mixers, setActiveMixerId } = useActiveMixer();
 
-  if (!activeMixer || mixers.length === 0) return null;
+  if (!activeMixer || mixers.length <= 1) return null;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="hidden lg:flex gap-1.5 h-7 px-2.5">
-          <span className="font-semibold">{activeMixer.designation}</span>
-          <span className="text-muted-foreground">·</span>
-          <span>{activeMixer.name}</span>
-          <span className="text-muted-foreground text-xs">({activeMixer.channelCount}ch)</span>
-          {mixers.length > 1 && <ChevronDown className="h-3 w-3 opacity-50 ml-0.5" />}
+        <Button variant="outline" size="sm" className="hidden max-w-44 lg:flex gap-1.5 h-7 px-2.5">
+          <span className="truncate font-medium">{activeMixer.name}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
@@ -63,15 +59,6 @@ export function MixerSelector({ onOpenSettings }: MixerSelectorProps) {
             )}
           </DropdownMenuItem>
         ))}
-        {mixers.length === 1 && onOpenSettings && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onOpenSettings(activeMixer._id as Id<"mixers">)}>
-              <Settings className="mr-2 h-4 w-4" />
-              Mixer Settings
-            </DropdownMenuItem>
-          </>
-        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
