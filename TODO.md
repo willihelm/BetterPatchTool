@@ -36,6 +36,7 @@ Open tasks based on PRD requirements. Ordered roughly by priority.
 - [ ] Fill Down (Ctrl+D to apply value to selected cells)
 - [ ] New row on Enter in last row
 - [ ] Customizable columns (default set of columns + user-configurable additional columns)
+- [ ] Customizable bus categories?
 
 ## Stagebox / IO Devices
 
