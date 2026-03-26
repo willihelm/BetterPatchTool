@@ -78,11 +78,12 @@ const PortDataContext = createContext<PortDataContextValue | null>(null);
 
 interface PortDataProviderProps {
   projectId: Id<"projects">;
+  accessToken?: string;
   children: ReactNode;
 }
 
-export function PortDataProvider({ projectId, children }: PortDataProviderProps) {
-  const data = useQuery(api.patching.getAllPatchingData, { projectId });
+export function PortDataProvider({ projectId, accessToken, children }: PortDataProviderProps) {
+  const data = useQuery(api.patching.getAllPatchingData, { projectId, accessToken });
 
   const value = useMemo<PortDataContextValue>(() => {
     if (!data) {

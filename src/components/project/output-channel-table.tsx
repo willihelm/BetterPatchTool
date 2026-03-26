@@ -28,11 +28,13 @@ interface OutputChannelTableProps {
   mixerId?: Id<"mixers"> | null;
   channelType?: "input" | "output";
   onChannelTypeChange?: (type: "input" | "output") => void;
+  accessToken?: string;
+  readOnly?: boolean;
 }
 
-export function OutputChannelTable({ projectId, mixerId, channelType, onChannelTypeChange }: OutputChannelTableProps) {
-  const channels = useQuery(api.outputChannels.list, { projectId, mixerId: mixerId ?? undefined });
-  const mixers = useQuery(api.mixers.list, { projectId });
+export function OutputChannelTable({ projectId, mixerId, channelType, onChannelTypeChange, accessToken, readOnly = false }: OutputChannelTableProps) {
+  const channels = useQuery(api.outputChannels.list, { projectId, mixerId: mixerId ?? undefined, accessToken });
+  const mixers = useQuery(api.mixers.list, { projectId, accessToken });
 
   const createChannel = useMutation(api.outputChannels.create);
   const updateChannel = useMutation(api.outputChannels.update);
@@ -79,6 +81,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
 
   // Handle row changes from the grid
   const handleRowsChange = useCallback((newRows: OutputChannelRow[], { indexes, column }: { indexes: number[]; column: Column<OutputChannelRow> }) => {
+    if (readOnly) return;
     for (const index of indexes) {
       const row = newRows[index];
       const originalRow = rows[index];
@@ -128,9 +131,10 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
         });
       }
     }
-  }, [rows, patchWithConflictCheck, patchChannelDirect, updateChannel, pushAction]);
+  }, [readOnly, rows, patchWithConflictCheck, patchChannelDirect, updateChannel, pushAction]);
 
   const handleToggleStereo = useCallback(async (channelId: string) => {
+    if (readOnly) return;
     const row = rows.find((r) => r._id === channelId);
     const oldIsStereo = row?.isStereo ?? false;
     const oldPortIdRight = row?.ioPortIdRight as Id<"ioPorts"> | undefined;
@@ -147,7 +151,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
       },
       redo: async () => { await toggleStereoChannel({ channelId: id }); },
     });
-  }, [toggleStereoChannel, pushAction, rows, patchChannelDirect]);
+  }, [readOnly, toggleStereoChannel, pushAction, rows, patchChannelDirect]);
 
   // Column definitions
   const columns: Column<OutputChannelRow>[] = useMemo(() => [
@@ -208,6 +212,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
           row={row}
           portType="output"
           activeMixerId={mixerId ?? undefined}
+          disabled={readOnly}
           onSelect={(portId, portIdRight) => {
             const id = row._id as Id<"outputChannels">;
             const oldPortId = row.ioPortId as Id<"ioPorts"> | null ?? null;
@@ -239,7 +244,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
       frozen: true,
       renderCell: TextCell,
       renderEditCell: textEditor,
-      editable: true,
+      editable: !readOnly,
     },
     {
       key: "destination",
@@ -247,7 +252,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
       minWidth: 120,
       renderCell: TextCell,
       renderEditCell: textEditor,
-      editable: true,
+      editable: !readOnly,
     },
     {
       key: "ampProcessor",
@@ -255,7 +260,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
       minWidth: 100,
       renderCell: TextCell,
       renderEditCell: textEditor,
-      editable: true,
+      editable: !readOnly,
     },
     {
       key: "location",
@@ -263,7 +268,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
       width: 96,
       renderCell: TextCell,
       renderEditCell: textEditor,
-      editable: true,
+      editable: !readOnly,
     },
     {
       key: "cable",
@@ -271,7 +276,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
       width: 96,
       renderCell: TextCell,
       renderEditCell: textEditor,
-      editable: true,
+      editable: !readOnly,
     },
     {
       key: "notes",
@@ -279,14 +284,14 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
       minWidth: 100,
       renderCell: TextCell,
       renderEditCell: textEditor,
-      editable: true,
+      editable: !readOnly,
     },
     {
       key: "actions",
       name: "",
       width: 48,
       renderCell: ({ row }) => (
-        <DropdownMenu>
+        readOnly ? null : <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
@@ -326,7 +331,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
       ),
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps -- rows accessed via ref
-  ], [selection, isStereoAvailable, moveChannel, removeChannel, handleToggleStereo, patchWithConflictCheck, patchChannelDirect, pushAction]);
+  ], [readOnly, selection, isStereoAvailable, moveChannel, removeChannel, handleToggleStereo, patchWithConflictCheck, patchChannelDirect, pushAction]);
 
   const columnIndexByKey = useMemo(() => {
     const indexByKey = new Map<string, number>();
@@ -337,6 +342,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
   }, [columns]);
 
   const handleAddChannel = async () => {
+    if (readOnly) return;
     await createChannel({
       projectId,
       busName: "",
@@ -348,6 +354,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
   // Custom key handlers for Alt+Arrow (move rows) and Alt+Enter (copy+increment)
   const handleCellKeyDown = useCallback((args: { row: OutputChannelRow; rowIdx: number; column: Column<OutputChannelRow>; mode: "SELECT" | "EDIT" }, event: React.KeyboardEvent<HTMLDivElement>) => {
     const { row, rowIdx, column, mode } = args;
+    if (readOnly) return;
 
     // Only handle in SELECT mode
     if (mode !== "SELECT") return;
@@ -487,7 +494,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
       });
       return;
     }
-  }, [rows, moveChannel, updateChannel, patchChannelDirect, isStereoAvailable, toggleStereoChannel, columnIndexByKey, pushAction]);
+  }, [readOnly, rows, moveChannel, updateChannel, patchChannelDirect, isStereoAvailable, toggleStereoChannel, columnIndexByKey, pushAction]);
 
   // Row class for stereo and selection
   const rowClass = useCallback((row: OutputChannelRow) => {
@@ -550,7 +557,7 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
       </div>
 
       {/* Selection toolbar */}
-      {selection.hasSelection && (
+      {!readOnly && selection.hasSelection && (
         <div className="flex items-center gap-3 p-3 bg-primary/10 rounded-lg border border-primary/20">
           <span className="text-sm font-medium">
             {selection.selectionCount} channel{selection.selectionCount !== 1 ? "s" : ""} selected
@@ -605,19 +612,23 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
         </div>
       </PortDropdownContext.Provider>
 
-      <Button onClick={handleAddChannel} size="sm" variant="outline" className="w-full">
-        <Plus className="mr-2 h-4 w-4" />
-        Add Output
-      </Button>
+      {!readOnly && (
+        <Button onClick={handleAddChannel} size="sm" variant="outline" className="w-full">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Output
+        </Button>
+      )}
 
-      <AutoPatchDialog
-        open={autoPatchDialogOpen}
-        onOpenChange={setAutoPatchDialogOpen}
-        projectId={projectId}
-        channelType="output"
-        selectedChannelIds={selection.getSelectedInOrder()}
-        onComplete={selection.clearSelection}
-      />
+      {!readOnly && (
+        <AutoPatchDialog
+          open={autoPatchDialogOpen}
+          onOpenChange={setAutoPatchDialogOpen}
+          projectId={projectId}
+          channelType="output"
+          selectedChannelIds={selection.getSelectedInOrder()}
+          onComplete={selection.clearSelection}
+        />
+      )}
 
       <OutputPatchConflictDialog
         conflict={conflict}

@@ -18,12 +18,13 @@ const ActiveMixerContext = createContext<ActiveMixerContextValue | null>(null);
 
 interface ActiveMixerProviderProps {
   projectId: Id<"projects">;
+  accessToken?: string;
   children: ReactNode;
 }
 
-export function ActiveMixerProvider({ projectId, children }: ActiveMixerProviderProps) {
-  const mixers = useQuery(api.mixers.list, { projectId }) as Mixer[] | undefined;
-  const inputChannels = useQuery(api.inputChannels.list, { projectId });
+export function ActiveMixerProvider({ projectId, accessToken, children }: ActiveMixerProviderProps) {
+  const mixers = useQuery(api.mixers.list, { projectId, accessToken }) as Mixer[] | undefined;
+  const inputChannels = useQuery(api.inputChannels.list, { projectId, accessToken });
   const migrate = useMutation(api.migrations.assignChannelsToDefaultMixer);
 
   const [activeMixerId, setActiveMixerIdState] = useState<Id<"mixers"> | null>(null);
@@ -37,11 +38,11 @@ export function ActiveMixerProvider({ projectId, children }: ActiveMixerProvider
 
   // Trigger migration once
   useEffect(() => {
-    if (needsMigration && !migrationTriggered.current) {
+    if (!accessToken && needsMigration && !migrationTriggered.current) {
       migrationTriggered.current = true;
       migrate({ projectId });
     }
-  }, [needsMigration, migrate, projectId]);
+  }, [accessToken, needsMigration, migrate, projectId]);
 
   // Initialize to first mixer
   useEffect(() => {

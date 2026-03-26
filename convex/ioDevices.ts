@@ -1,11 +1,26 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { generatePorts } from "./_helpers/portGeneration";
+import {
+  accessTokenValidator,
+  getProjectAccessForRequest,
+  requireProjectAccess,
+  requireProjectRole,
+  shouldGracefullyHandleTokenAccessLoss,
+} from "./_helpers/projectAccess";
+import { logProjectActivity } from "./_helpers/projectActivity";
 
 // Get all IO devices for a project
 export const list = query({
-  args: { projectId: v.id("projects") },
+  args: { projectId: v.id("projects"), accessToken: accessTokenValidator },
   handler: async (ctx, args) => {
+    const access = await getProjectAccessForRequest(ctx, args.projectId, args.accessToken);
+    if (!access) {
+      if (shouldGracefullyHandleTokenAccessLoss(args.accessToken)) {
+        return [];
+      }
+      throw new Error("Not authorized");
+    }
     const devices = await ctx.db
       .query("ioDevices")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -16,8 +31,15 @@ export const list = query({
 
 // Get all IO devices with their ports for a project
 export const listWithPorts = query({
-  args: { projectId: v.id("projects") },
+  args: { projectId: v.id("projects"), accessToken: accessTokenValidator },
   handler: async (ctx, args) => {
+    const access = await getProjectAccessForRequest(ctx, args.projectId, args.accessToken);
+    if (!access) {
+      if (shouldGracefullyHandleTokenAccessLoss(args.accessToken)) {
+        return [];
+      }
+      throw new Error("Not authorized");
+    }
     const ioDevices = await ctx.db
       .query("ioDevices")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -63,10 +85,11 @@ export const listWithPorts = query({
 
 // Get IO device with ports
 export const getWithPorts = query({
-  args: { ioDeviceId: v.id("ioDevices") },
+  args: { ioDeviceId: v.id("ioDevices"), accessToken: accessTokenValidator },
   handler: async (ctx, args) => {
     const ioDevice = await ctx.db.get(args.ioDeviceId);
     if (!ioDevice) return null;
+    await requireProjectAccess(ctx, ioDevice.projectId, args.accessToken);
 
     const ports = await ctx.db
       .query("ioPorts")
@@ -96,8 +119,15 @@ export const getWithPorts = query({
 
 // Get all ports for a project (for dropdowns)
 export const listAllPorts = query({
-  args: { projectId: v.id("projects") },
+  args: { projectId: v.id("projects"), accessToken: accessTokenValidator },
   handler: async (ctx, args) => {
+    const access = await getProjectAccessForRequest(ctx, args.projectId, args.accessToken);
+    if (!access) {
+      if (shouldGracefullyHandleTokenAccessLoss(args.accessToken)) {
+        return [];
+      }
+      throw new Error("Not authorized");
+    }
     const ioDevicesUnsorted = await ctx.db
       .query("ioDevices")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -144,6 +174,7 @@ export const create = mutation({
     portsPerRow: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const access = await requireProjectRole(ctx, args.projectId, "editor");
     const headphoneOutputCount = args.headphoneOutputCount ?? 0;
     const aesInputCount = args.aesInputCount ?? 0;
     const aesOutputCount = args.aesOutputCount ?? 0;
@@ -184,6 +215,15 @@ export const create = mutation({
       aesOutputCount,
     });
 
+    await logProjectActivity(ctx, {
+      projectId: args.projectId,
+      actorUserId: access.userId!,
+      entityType: "io_device",
+      entityId: String(ioDeviceId),
+      action: "created",
+      summary: `Created IO device "${args.name}"`,
+    });
+
     return ioDeviceId;
   },
 });
@@ -200,11 +240,23 @@ export const update = mutation({
     portsPerRow: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const device = await ctx.db.get(args.ioDeviceId);
+    if (!device) throw new Error("IO device not found");
+    const access = await requireProjectRole(ctx, device.projectId, "editor");
     const { ioDeviceId, ...updates } = args;
     const filteredUpdates = Object.fromEntries(
       Object.entries(updates).filter(([_, v]) => v !== undefined)
     );
     await ctx.db.patch(ioDeviceId, filteredUpdates);
+    await logProjectActivity(ctx, {
+      projectId: device.projectId,
+      actorUserId: access.userId!,
+      entityType: "io_device",
+      entityId: String(ioDeviceId),
+      action: "updated",
+      summary: `Updated IO device "${device.name}"`,
+      metadata: filteredUpdates,
+    });
   },
 });
 
@@ -212,6 +264,9 @@ export const update = mutation({
 export const remove = mutation({
   args: { ioDeviceId: v.id("ioDevices") },
   handler: async (ctx, args) => {
+    const device = await ctx.db.get(args.ioDeviceId);
+    if (!device) return;
+    const access = await requireProjectRole(ctx, device.projectId, "editor");
     // First delete all ports
     const ports = await ctx.db
       .query("ioPorts")
@@ -224,6 +279,14 @@ export const remove = mutation({
 
     // Then delete the IO device
     await ctx.db.delete(args.ioDeviceId);
+    await logProjectActivity(ctx, {
+      projectId: device.projectId,
+      actorUserId: access.userId!,
+      entityType: "io_device",
+      entityId: String(args.ioDeviceId),
+      action: "removed",
+      summary: `Removed IO device "${device.name}"`,
+    });
   },
 });
 
@@ -234,6 +297,11 @@ export const updatePortLabel = mutation({
     label: v.string(),
   },
   handler: async (ctx, args) => {
+    const port = await ctx.db.get(args.portId);
+    if (!port) throw new Error("Port not found");
+    const device = await ctx.db.get(port.ioDeviceId);
+    if (!device) throw new Error("IO device not found");
+    await requireProjectRole(ctx, device.projectId, "editor");
     await ctx.db.patch(args.portId, { label: args.label });
   },
 });
@@ -247,6 +315,7 @@ export const updatePortLabels = mutation({
   handler: async (ctx, args) => {
     const ioDevice = await ctx.db.get(args.ioDeviceId);
     if (!ioDevice) return;
+    await requireProjectRole(ctx, ioDevice.projectId, "editor");
 
     const ports = await ctx.db
       .query("ioPorts")
@@ -288,6 +357,7 @@ export const updatePortCounts = mutation({
   handler: async (ctx, args) => {
     const ioDevice = await ctx.db.get(args.ioDeviceId);
     if (!ioDevice) return;
+    await requireProjectRole(ctx, ioDevice.projectId, "editor");
 
     const ports = await ctx.db
       .query("ioPorts")
@@ -594,6 +664,7 @@ export const moveDevice = mutation({
   handler: async (ctx, args) => {
     const device = await ctx.db.get(args.ioDeviceId);
     if (!device) return;
+    await requireProjectRole(ctx, device.projectId, "editor");
 
     const allDevices = await ctx.db
       .query("ioDevices")
@@ -626,6 +697,9 @@ export const reorderDevices = mutation({
     deviceIds: v.array(v.id("ioDevices")),
   },
   handler: async (ctx, args) => {
+    const firstDevice = args.deviceIds.length > 0 ? await ctx.db.get(args.deviceIds[0]) : null;
+    if (!firstDevice) return;
+    await requireProjectRole(ctx, firstDevice.projectId, "editor");
     // Update each device with its new order based on array position
     for (let i = 0; i < args.deviceIds.length; i++) {
       await ctx.db.patch(args.deviceIds[i], { order: i + 1 });

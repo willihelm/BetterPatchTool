@@ -1,10 +1,13 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-
-const busTypeValidator = v.union(
-  v.literal("group"), v.literal("aux"), v.literal("fx"),
-  v.literal("matrix"), v.literal("master"), v.literal("cue")
-);
+import {
+  accessTokenValidator,
+  getProjectAccessForRequest,
+  requireProjectAccess,
+  requireProjectRole,
+  shouldGracefullyHandleTokenAccessLoss,
+} from "./_helpers/projectAccess";
+import { logProjectActivity } from "./_helpers/projectActivity";
 
 const busConfigValidator = v.optional(v.object({
   groups: v.optional(v.number()),
@@ -16,7 +19,6 @@ const busConfigValidator = v.optional(v.object({
 }));
 
 type BusType = "group" | "aux" | "fx" | "matrix" | "master" | "cue";
-
 interface BusConfig {
   groups?: number; auxes?: number; fx?: number;
   matrices?: number; masters?: number; cue?: number;
@@ -37,17 +39,27 @@ function generateBusChannelList(busConfig: BusConfig): Array<{ busType: BusType;
     const count = busConfig[key] ?? 0;
     if (count <= 0) continue;
     for (let i = 1; i <= count; i++) {
-      const busName = count === 1 && (busType === "master" || busType === "cue") ? label : `${label} ${i}`;
+      const busName =
+        count === 1 && (busType === "master" || busType === "cue") ? label : `${label} ${i}`;
       channels.push({ busType, busName });
     }
   }
   return channels;
 }
 
-// Get all mixers for a project (sorted by order)
 export const list = query({
-  args: { projectId: v.id("projects") },
+  args: {
+    projectId: v.id("projects"),
+    accessToken: accessTokenValidator,
+  },
   handler: async (ctx, args) => {
+    const access = await getProjectAccessForRequest(ctx, args.projectId, args.accessToken);
+    if (!access) {
+      if (shouldGracefullyHandleTokenAccessLoss(args.accessToken)) {
+        return [];
+      }
+      throw new Error("Not authorized");
+    }
     const mixers = await ctx.db
       .query("mixers")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -56,15 +68,19 @@ export const list = query({
   },
 });
 
-// Get mixer
 export const get = query({
-  args: { mixerId: v.id("mixers") },
+  args: {
+    mixerId: v.id("mixers"),
+    accessToken: accessTokenValidator,
+  },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.mixerId);
+    const mixer = await ctx.db.get(args.mixerId);
+    if (!mixer) return null;
+    await requireProjectAccess(ctx, mixer.projectId, args.accessToken);
+    return mixer;
   },
 });
 
-// Create mixer with auto-generated channels
 export const create = mutation({
   args: {
     projectId: v.id("projects"),
@@ -76,14 +92,12 @@ export const create = mutation({
     designation: v.string(),
   },
   handler: async (ctx, args) => {
-    // Auto-assign next order value
+    const access = await requireProjectRole(ctx, args.projectId, "editor");
     const existingMixers = await ctx.db
       .query("mixers")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
-    const maxOrder = existingMixers.length > 0
-      ? Math.max(...existingMixers.map(m => m.order ?? 0))
-      : -1;
+    const maxOrder = existingMixers.length > 0 ? Math.max(...existingMixers.map((m) => m.order ?? 0)) : -1;
 
     const mixerId = await ctx.db.insert("mixers", {
       projectId: args.projectId,
@@ -95,7 +109,6 @@ export const create = mutation({
       order: maxOrder + 1,
     });
 
-    // Auto-generate empty input channels
     for (let i = 0; i < args.channelCount; i++) {
       await ctx.db.insert("inputChannels", {
         projectId: args.projectId,
@@ -107,7 +120,6 @@ export const create = mutation({
       });
     }
 
-    // Auto-generate output channels with bus types and pre-filled names
     const config = args.busConfig ?? { auxes: 24 };
     const busChannels = generateBusChannelList(config);
     for (let i = 0; i < busChannels.length; i++) {
@@ -121,11 +133,19 @@ export const create = mutation({
       });
     }
 
+    await logProjectActivity(ctx, {
+      projectId: args.projectId,
+      actorUserId: access.userId!,
+      entityType: "mixer",
+      entityId: String(mixerId),
+      action: "created",
+      summary: `Created mixer "${args.name}"`,
+    });
+
     return mixerId;
   },
 });
 
-// Update mixer
 export const update = mutation({
   args: {
     mixerId: v.id("mixers"),
@@ -137,22 +157,33 @@ export const update = mutation({
     order: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const mixer = await ctx.db.get(args.mixerId);
+    if (!mixer) throw new Error("Mixer not found");
+    const access = await requireProjectRole(ctx, mixer.projectId, "editor");
     const { mixerId, ...updates } = args;
     const filteredUpdates = Object.fromEntries(
-      Object.entries(updates).filter(([_, v]) => v !== undefined)
+      Object.entries(updates).filter(([_, value]) => value !== undefined)
     );
     await ctx.db.patch(mixerId, filteredUpdates);
+    await logProjectActivity(ctx, {
+      projectId: mixer.projectId,
+      actorUserId: access.userId!,
+      entityType: "mixer",
+      entityId: String(mixerId),
+      action: "updated",
+      summary: `Updated mixer "${mixer.name}"`,
+      metadata: filteredUpdates,
+    });
   },
 });
 
-// Delete mixer (cascade delete channels, prevent deleting last mixer)
 export const remove = mutation({
   args: { mixerId: v.id("mixers") },
   handler: async (ctx, args) => {
     const mixer = await ctx.db.get(args.mixerId);
     if (!mixer) throw new Error("Mixer not found");
+    const access = await requireProjectRole(ctx, mixer.projectId, "editor");
 
-    // Prevent deleting the last mixer
     const allMixers = await ctx.db
       .query("mixers")
       .withIndex("by_project", (q) => q.eq("projectId", mixer.projectId))
@@ -161,7 +192,6 @@ export const remove = mutation({
       throw new Error("Cannot delete the last mixer");
     }
 
-    // Cascade delete input channels
     const inputChannels = await ctx.db
       .query("inputChannels")
       .withIndex("by_mixer", (q) => q.eq("mixerId", args.mixerId))
@@ -170,7 +200,6 @@ export const remove = mutation({
       await ctx.db.delete(channel._id);
     }
 
-    // Cascade delete output channels
     const outputChannels = await ctx.db
       .query("outputChannels")
       .withIndex("by_mixer", (q) => q.eq("mixerId", args.mixerId))
@@ -180,15 +209,25 @@ export const remove = mutation({
     }
 
     await ctx.db.delete(args.mixerId);
+    await logProjectActivity(ctx, {
+      projectId: mixer.projectId,
+      actorUserId: access.userId!,
+      entityType: "mixer",
+      entityId: String(args.mixerId),
+      action: "removed",
+      summary: `Removed mixer "${mixer.name}"`,
+    });
   },
 });
 
-// Reorder mixers
 export const reorderMixers = mutation({
   args: {
     mixerIds: v.array(v.id("mixers")),
   },
   handler: async (ctx, args) => {
+    const firstMixer = args.mixerIds.length > 0 ? await ctx.db.get(args.mixerIds[0]) : null;
+    if (!firstMixer) return;
+    await requireProjectRole(ctx, firstMixer.projectId, "editor");
     for (let i = 0; i < args.mixerIds.length; i++) {
       await ctx.db.patch(args.mixerIds[i], { order: i });
     }

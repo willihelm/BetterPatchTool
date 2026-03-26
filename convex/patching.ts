@@ -1,12 +1,32 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import {
+  accessTokenValidator,
+  getProjectAccessForRequest,
+  requireProjectAccess,
+  requireProjectRole,
+  shouldGracefullyHandleTokenAccessLoss,
+} from "./_helpers/projectAccess";
+import { logProjectActivity } from "./_helpers/projectActivity";
 
 // Combined query that returns all patching data in a single call
 // This reduces the number of DB queries and avoids fetching the same data multiple times
 export const getAllPatchingData = query({
-  args: { projectId: v.id("projects") },
+  args: { projectId: v.id("projects"), accessToken: accessTokenValidator },
   handler: async (ctx, args) => {
+    const access = await getProjectAccessForRequest(ctx, args.projectId, args.accessToken);
+    if (!access) {
+      if (shouldGracefullyHandleTokenAccessLoss(args.accessToken)) {
+        return {
+          portInfoMap: {},
+          portUsageMap: {},
+          inputPortGroups: [],
+          outputPortGroups: [],
+        };
+      }
+      throw new Error("Not authorized");
+    }
     // Fetch all data in parallel to minimize latency
     const [ioDevicesUnsorted, inputChannels, outputChannels, mixers] = await Promise.all([
       ctx.db
@@ -226,8 +246,15 @@ export const getAllPatchingData = query({
 
 // Get port usage map for a project - shows which channels each port is assigned to
 export const getPortUsageMap = query({
-  args: { projectId: v.id("projects") },
+  args: { projectId: v.id("projects"), accessToken: accessTokenValidator },
   handler: async (ctx, args) => {
+    const access = await getProjectAccessForRequest(ctx, args.projectId, args.accessToken);
+    if (!access) {
+      if (shouldGracefullyHandleTokenAccessLoss(args.accessToken)) {
+        return {};
+      }
+      throw new Error("Not authorized");
+    }
     const inputChannels = await ctx.db
       .query("inputChannels")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -318,8 +345,16 @@ export const getAvailablePorts = query({
   args: {
     projectId: v.id("projects"),
     portType: v.union(v.literal("input"), v.literal("output")),
+    accessToken: accessTokenValidator,
   },
   handler: async (ctx, args) => {
+    const access = await getProjectAccessForRequest(ctx, args.projectId, args.accessToken);
+    if (!access) {
+      if (shouldGracefullyHandleTokenAccessLoss(args.accessToken)) {
+        return [];
+      }
+      throw new Error("Not authorized");
+    }
     // Fetch all data in parallel to avoid sequential queries
     const [ioDevicesUnsorted, inputChannels, outputChannels] = await Promise.all([
       ctx.db
@@ -413,6 +448,7 @@ export const patchInputChannel = mutation({
   handler: async (ctx, args) => {
     const channel = await ctx.db.get(args.channelId);
     if (!channel) throw new Error("Channel not found");
+    const access = await requireProjectRole(ctx, channel.projectId, "editor");
 
     // Validate port type if assigning (should be input port)
     if (args.ioPortId) {
@@ -444,6 +480,14 @@ export const patchInputChannel = mutation({
     }
 
     await ctx.db.patch(args.channelId, updates);
+    await logProjectActivity(ctx, {
+      projectId: channel.projectId,
+      actorUserId: access.userId!,
+      entityType: "input_channel",
+      entityId: String(args.channelId),
+      action: "patched",
+      summary: `Patched input channel ${channel.channelNumber}`,
+    });
   },
 });
 
@@ -458,6 +502,7 @@ export const patchOutputChannel = mutation({
   handler: async (ctx, args) => {
     const channel = await ctx.db.get(args.channelId);
     if (!channel) throw new Error("Channel not found");
+    const access = await requireProjectRole(ctx, channel.projectId, "editor");
 
     // Validate port type if assigning (should be output port)
     if (args.ioPortId) {
@@ -541,6 +586,14 @@ export const patchOutputChannel = mutation({
     }
 
     await ctx.db.patch(args.channelId, updates);
+    await logProjectActivity(ctx, {
+      projectId: channel.projectId,
+      actorUserId: access.userId!,
+      entityType: "output_channel",
+      entityId: String(args.channelId),
+      action: "patched",
+      summary: `Patched output channel ${channel.busName || channel.order}`,
+    });
     return null;
   },
 });
@@ -560,6 +613,7 @@ export const autoPatchInputChannels = mutation({
     // Get the IO device
     const ioDevice = await ctx.db.get(startPort.ioDeviceId);
     if (!ioDevice) throw new Error("IO device not found");
+    await requireProjectRole(ctx, ioDevice.projectId, "editor");
 
     // Get all input ports from this device, sorted by port number
     const devicePorts = await ctx.db
@@ -695,6 +749,7 @@ export const autoPatchOutputChannels = mutation({
     // Get the IO device
     const ioDevice = await ctx.db.get(startPort.ioDeviceId);
     if (!ioDevice) throw new Error("IO device not found");
+    await requireProjectRole(ctx, ioDevice.projectId, "editor");
 
     // Get all output ports from this device, sorted by port number
     const devicePorts = await ctx.db

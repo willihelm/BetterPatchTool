@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { generatePorts } from "./_helpers/portGeneration";
+import { requireProjectRole } from "./_helpers/projectAccess";
 
 export const list = query({
   args: {},
@@ -154,6 +155,7 @@ export const saveFromProject = mutation({
 
     const device = await ctx.db.get(args.ioDeviceId);
     if (!device) throw new Error("IO device not found");
+    await requireProjectRole(ctx, device.projectId, "viewer");
 
     const existing = await ctx.db
       .query("inventoryIODevices")

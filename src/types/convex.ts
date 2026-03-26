@@ -10,7 +10,11 @@ export interface Project {
   ownerId: string;
   collaborators: string[];
   isArchived: boolean;
+  accessRole?: ProjectAccessRole;
+  isOwned?: boolean;
 }
+
+export type ProjectAccessRole = "owner" | "editor" | "viewer" | "share_viewer";
 
 export interface Mixer {
   _id: string;
@@ -172,4 +176,56 @@ export interface ProjectSnapshotPayload {
   groups: Group[];
   inputChannels: InputChannel[];
   outputChannels: OutputChannel[];
+}
+
+export interface ProjectCollaborator {
+  _id: string;
+  projectId: string;
+  userId?: string;
+  email?: string;
+  role: "owner" | "viewer" | "editor";
+  displayName: string;
+  invitedBy: string;
+  createdAt: number;
+  acceptedAt?: number;
+  isPending?: boolean;
+  isOwner?: boolean;
+}
+
+export interface ProjectShareLink {
+  _id: string;
+  projectId: string;
+  token?: string;
+  label: string;
+  isRevoked: boolean;
+  createdBy: string;
+  createdAt: number;
+  lastAccessedAt?: number;
+}
+
+export interface ProjectPresenceEntry {
+  _id: string;
+  projectId: string;
+  userId: string;
+  sessionId: string;
+  displayName: string;
+  activeArea?: string;
+  cursor?: {
+    rowId?: string;
+    columnKey?: string;
+  };
+  lastSeenAt: number;
+}
+
+export interface ProjectActivityEntry {
+  _id: string;
+  projectId: string;
+  actorUserId: string;
+  actorName?: string;
+  entityType: string;
+  entityId?: string;
+  action: string;
+  summary: string;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
 }

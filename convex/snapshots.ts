@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { accessTokenValidator, requireProjectAccess, requireProjectRole } from "./_helpers/projectAccess";
+import { logProjectActivity } from "./_helpers/projectActivity";
 
 const SNAPSHOT_DATA_VERSION = 1;
 
@@ -19,8 +20,9 @@ type ProjectSnapshotPayload = {
 };
 
 export const list = query({
-  args: { projectId: v.id("projects") },
+  args: { projectId: v.id("projects"), accessToken: accessTokenValidator },
   handler: async (ctx, args) => {
+    await requireProjectAccess(ctx, args.projectId, args.accessToken);
     return await ctx.db
       .query("projectSnapshots")
       .withIndex("by_project_and_createdAt", (q) => q.eq("projectId", args.projectId))
@@ -30,23 +32,20 @@ export const list = query({
 });
 
 export const get = query({
-  args: { snapshotId: v.id("projectSnapshots") },
+  args: { snapshotId: v.id("projectSnapshots"), accessToken: accessTokenValidator },
   handler: async (ctx, args) => {
     const snapshot = await ctx.db.get(args.snapshotId);
     if (!snapshot) return null;
-
+    await requireProjectAccess(ctx, snapshot.projectId, args.accessToken);
     const data = await ctx.db
       .query("projectSnapshotData")
       .withIndex("by_snapshot", (q) => q.eq("snapshotId", args.snapshotId))
       .first();
-
     if (!data) return null;
-
-    const payload = JSON.parse(data.blob) as ProjectSnapshotPayload;
 
     return {
       snapshot,
-      payload,
+      payload: JSON.parse(data.blob) as ProjectSnapshotPayload,
     };
   },
 });
@@ -58,65 +57,38 @@ export const create = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-    const project = await ctx.db.get(args.projectId);
-    if (!project) {
-      throw new Error("Project not found");
-    }
+    const access = await requireProjectRole(ctx, args.projectId, "editor");
+    const project = access.project;
 
     const mixers = await ctx.db
       .query("mixers")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
-
     const ioDevices = await ctx.db
       .query("ioDevices")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
-
     const ioPortsArrays = await Promise.all(
       ioDevices.map((device) =>
-        ctx.db
-          .query("ioPorts")
-          .withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", device._id))
-          .collect()
+        ctx.db.query("ioPorts").withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", device._id)).collect()
       )
     );
-    const ioPorts = ioPortsArrays.flat();
-
     const groups = await ctx.db
       .query("groups")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
-
     const inputChannels = await ctx.db
       .query("inputChannels")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
-
     const outputChannels = await ctx.db
       .query("outputChannels")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
 
-    const payload: ProjectSnapshotPayload = {
-      project: {
-        title: project.title,
-        date: project.date,
-        venue: project.venue,
-      },
-      mixers,
-      ioDevices,
-      ioPorts,
-      groups,
-      inputChannels,
-      outputChannels,
-    };
-
     const snapshotId = await ctx.db.insert("projectSnapshots", {
       projectId: args.projectId,
-      createdBy: userId,
+      createdBy: access.userId!,
       createdAt: Date.now(),
       name: args.name,
       note: args.note,
@@ -125,8 +97,25 @@ export const create = mutation({
 
     await ctx.db.insert("projectSnapshotData", {
       snapshotId,
-      blob: JSON.stringify(payload),
+      blob: JSON.stringify({
+        project: { title: project.title, date: project.date, venue: project.venue },
+        mixers,
+        ioDevices,
+        ioPorts: ioPortsArrays.flat(),
+        groups,
+        inputChannels,
+        outputChannels,
+      } satisfies ProjectSnapshotPayload),
       compression: "none",
+    });
+
+    await logProjectActivity(ctx, {
+      projectId: args.projectId,
+      actorUserId: access.userId!,
+      entityType: "snapshot",
+      entityId: String(snapshotId),
+      action: "created",
+      summary: `Created savepoint "${args.name}"`,
     });
 
     return snapshotId;
@@ -136,15 +125,9 @@ export const create = mutation({
 export const remove = mutation({
   args: { snapshotId: v.id("projectSnapshots") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
     const snapshot = await ctx.db.get(args.snapshotId);
     if (!snapshot) throw new Error("Snapshot not found");
-    const project = await ctx.db.get(snapshot.projectId);
-    if (!project) throw new Error("Project not found");
-    if (project.ownerId !== userId && !project.collaborators.includes(userId)) {
-      throw new Error("Not authorized");
-    }
+    const access = await requireProjectRole(ctx, snapshot.projectId, "editor");
 
     const data = await ctx.db
       .query("projectSnapshotData")
@@ -154,94 +137,75 @@ export const remove = mutation({
     for (const entry of data) {
       await ctx.db.delete(entry._id);
     }
-
     await ctx.db.delete(args.snapshotId);
+    await logProjectActivity(ctx, {
+      projectId: snapshot.projectId,
+      actorUserId: access.userId!,
+      entityType: "snapshot",
+      entityId: String(args.snapshotId),
+      action: "removed",
+      summary: `Removed savepoint "${snapshot.name}"`,
+    });
   },
 });
 
 export const restore = mutation({
   args: { snapshotId: v.id("projectSnapshots") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
     const snapshot = await ctx.db.get(args.snapshotId);
     if (!snapshot) throw new Error("Snapshot not found");
-    const project = await ctx.db.get(snapshot.projectId);
-    if (!project) throw new Error("Project not found");
-    if (project.ownerId !== userId && !project.collaborators.includes(userId)) {
-      throw new Error("Not authorized");
-    }
+    const access = await requireProjectRole(ctx, snapshot.projectId, "editor");
 
     const data = await ctx.db
       .query("projectSnapshotData")
       .withIndex("by_snapshot", (q) => q.eq("snapshotId", args.snapshotId))
       .first();
-
-    if (!data) {
-      throw new Error("Snapshot data not found");
-    }
+    if (!data) throw new Error("Snapshot data not found");
 
     const payload = JSON.parse(data.blob) as ProjectSnapshotPayload;
-
     const projectId = snapshot.projectId;
 
-    // Remove current data
     const inputChannels = await ctx.db
       .query("inputChannels")
       .withIndex("by_project", (q) => q.eq("projectId", projectId))
       .collect();
-    for (const channel of inputChannels) {
-      await ctx.db.delete(channel._id);
-    }
+    for (const channel of inputChannels) await ctx.db.delete(channel._id);
 
     const outputChannels = await ctx.db
       .query("outputChannels")
       .withIndex("by_project", (q) => q.eq("projectId", projectId))
       .collect();
-    for (const channel of outputChannels) {
-      await ctx.db.delete(channel._id);
-    }
+    for (const channel of outputChannels) await ctx.db.delete(channel._id);
 
     const groups = await ctx.db
       .query("groups")
       .withIndex("by_project", (q) => q.eq("projectId", projectId))
       .collect();
-    for (const group of groups) {
-      await ctx.db.delete(group._id);
-    }
+    for (const group of groups) await ctx.db.delete(group._id);
 
     const mixers = await ctx.db
       .query("mixers")
       .withIndex("by_project", (q) => q.eq("projectId", projectId))
       .collect();
-    for (const mixer of mixers) {
-      await ctx.db.delete(mixer._id);
-    }
+    for (const mixer of mixers) await ctx.db.delete(mixer._id);
 
     const ioDevices = await ctx.db
       .query("ioDevices")
       .withIndex("by_project", (q) => q.eq("projectId", projectId))
       .collect();
-
     for (const device of ioDevices) {
       const ports = await ctx.db
         .query("ioPorts")
         .withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", device._id))
         .collect();
-      for (const port of ports) {
-        await ctx.db.delete(port._id);
-      }
+      for (const port of ports) await ctx.db.delete(port._id);
       await ctx.db.delete(device._id);
     }
 
-    // Recreate data with new IDs
     const mixerMap = new Map<string, string>();
     for (const mixer of payload.mixers) {
       const { _id, _creationTime, projectId: _, ...mixerData } = mixer;
-      const newId = await ctx.db.insert("mixers", {
-        ...mixerData,
-        projectId,
-      });
+      const newId = await ctx.db.insert("mixers", { ...mixerData, projectId });
       mixerMap.set(_id, newId);
     }
 
@@ -249,10 +213,7 @@ export const restore = mutation({
     const ioPortMap = new Map<string, string>();
     for (const device of payload.ioDevices) {
       const { _id, _creationTime, projectId: _, ...deviceData } = device;
-      const newId = await ctx.db.insert("ioDevices", {
-        ...deviceData,
-        projectId,
-      });
+      const newId = await ctx.db.insert("ioDevices", { ...deviceData, projectId });
       ioDeviceMap.set(_id, newId);
     }
 
@@ -268,24 +229,12 @@ export const restore = mutation({
     const groupMap = new Map<string, string>();
     for (const group of payload.groups) {
       const { _id, _creationTime, projectId: _, ...groupData } = group;
-      const newId = await ctx.db.insert("groups", {
-        ...groupData,
-        projectId,
-      });
+      const newId = await ctx.db.insert("groups", { ...groupData, projectId });
       groupMap.set(_id, newId);
     }
 
     for (const channel of payload.inputChannels) {
-      const {
-        _id,
-        _creationTime,
-        projectId: _,
-        mixerId,
-        ioPortId,
-        ioPortIdRight,
-        groupId,
-        ...channelData
-      } = channel;
+      const { _id, _creationTime, projectId: _, mixerId, ioPortId, ioPortIdRight, groupId, ...channelData } = channel;
       await ctx.db.insert("inputChannels", {
         ...channelData,
         projectId,
@@ -297,15 +246,7 @@ export const restore = mutation({
     }
 
     for (const channel of payload.outputChannels) {
-      const {
-        _id,
-        _creationTime,
-        projectId: _,
-        mixerId,
-        ioPortId,
-        ioPortIdRight,
-        ...channelData
-      } = channel;
+      const { _id, _creationTime, projectId: _, mixerId, ioPortId, ioPortIdRight, ...channelData } = channel;
       await ctx.db.insert("outputChannels", {
         ...channelData,
         projectId,
@@ -321,6 +262,13 @@ export const restore = mutation({
       venue: payload.project.venue,
     });
 
-    return { restored: true };
+    await logProjectActivity(ctx, {
+      projectId,
+      actorUserId: access.userId!,
+      entityType: "snapshot",
+      entityId: String(args.snapshotId),
+      action: "restored",
+      summary: `Restored savepoint "${snapshot.name}"`,
+    });
   },
 });

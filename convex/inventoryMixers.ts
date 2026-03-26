@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { requireProjectRole } from "./_helpers/projectAccess";
 
 const busConfigValidator = v.optional(v.object({
   groups: v.optional(v.number()),
@@ -131,6 +132,7 @@ export const copyToProject = mutation({
 
     const invMixer = await ctx.db.get(args.id);
     if (!invMixer || invMixer.userId !== userId) throw new Error("Not found");
+    await requireProjectRole(ctx, args.projectId, "editor");
 
     // Auto-assign next designation letter
     const existingMixers = await ctx.db
@@ -199,6 +201,7 @@ export const saveFromProject = mutation({
 
     const mixer = await ctx.db.get(args.mixerId);
     if (!mixer) throw new Error("Mixer not found");
+    await requireProjectRole(ctx, mixer.projectId, "viewer");
 
     const existing = await ctx.db
       .query("inventoryMixers")

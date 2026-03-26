@@ -1,12 +1,22 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
+import {
+  accessTokenValidator,
+  requireAuthenticatedUser,
+  requireProjectAccess,
+  requireProjectRole,
+} from "./_helpers/projectAccess";
+import { logProjectActivity } from "./_helpers/projectActivity";
 
 type BusType = "group" | "aux" | "fx" | "matrix" | "master" | "cue";
 
 interface BusConfig {
-  groups?: number; auxes?: number; fx?: number;
-  matrices?: number; masters?: number; cue?: number;
+  groups?: number;
+  auxes?: number;
+  fx?: number;
+  matrices?: number;
+  masters?: number;
+  cue?: number;
 }
 
 const BUS_ENTRIES: Array<{ key: keyof BusConfig; busType: BusType; label: string }> = [
@@ -24,44 +34,68 @@ function generateBusChannelList(busConfig: BusConfig): Array<{ busType: BusType;
     const count = busConfig[key] ?? 0;
     if (count <= 0) continue;
     for (let i = 1; i <= count; i++) {
-      const busName = count === 1 && (busType === "master" || busType === "cue") ? label : `${label} ${i}`;
+      const busName =
+        count === 1 && (busType === "master" || busType === "cue") ? label : `${label} ${i}`;
       channels.push({ busType, busName });
     }
   }
   return channels;
 }
 
-// Get all projects for a user
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
-    return await ctx.db
+    const currentUser = await requireAuthenticatedUser(ctx);
+    const ownedProjects = await ctx.db
       .query("projects")
       .withIndex("by_owner_and_archived", (q) =>
-        q.eq("ownerId", userId).eq("isArchived", false)
+        q.eq("ownerId", currentUser.userId).eq("isArchived", false)
       )
       .collect();
+
+    const memberships = await ctx.db
+      .query("projectCollaborators")
+      .withIndex("by_user", (q) => q.eq("userId", currentUser.userId))
+      .collect();
+
+    const sharedProjects = await Promise.all(
+      memberships.map(async (membership) => {
+        const project = await ctx.db.get(membership.projectId);
+        if (!project || project.isArchived) return null;
+        return {
+          ...project,
+          accessRole: membership.role,
+          isOwned: false,
+        };
+      })
+    );
+
+    return [
+      ...ownedProjects.map((project) => ({
+        ...project,
+        accessRole: "owner" as const,
+        isOwned: true,
+      })),
+      ...sharedProjects.filter(Boolean),
+    ];
   },
 });
 
-// Get a project (only if owner or collaborator)
 export const get = query({
-  args: { projectId: v.id("projects") },
+  args: {
+    projectId: v.id("projects"),
+    accessToken: accessTokenValidator,
+  },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    const project = await ctx.db.get(args.projectId);
-    if (!project) return null;
-    if (!userId) return null;
-    if (project.ownerId !== userId && !project.collaborators.includes(userId)) {
-      return null;
-    }
-    return project;
+    const access = await requireProjectAccess(ctx, args.projectId, args.accessToken);
+    return {
+      ...access.project,
+      accessRole: access.role,
+      isOwned: access.role === "owner",
+    };
   },
 });
 
-// Create new project
 export const create = mutation({
   args: {
     title: v.string(),
@@ -78,8 +112,7 @@ export const create = mutation({
     })),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const currentUser = await requireAuthenticatedUser(ctx);
     const channelCount = args.channelCount ?? 48;
     const config = args.busConfig ?? { auxes: 24 };
 
@@ -87,22 +120,20 @@ export const create = mutation({
       title: args.title,
       date: args.date,
       venue: args.venue,
-      ownerId: userId,
+      ownerId: currentUser.userId,
       collaborators: [],
       isArchived: false,
     });
 
-    // Create default "FOH" mixer
     const mixerId = await ctx.db.insert("mixers", {
       projectId,
       name: "FOH",
       stereoMode: "linked_mono",
-      channelCount: channelCount,
+      channelCount,
       designation: "A",
       order: 0,
     });
 
-    // Generate initial empty input channels
     for (let i = 0; i < channelCount; i++) {
       await ctx.db.insert("inputChannels", {
         projectId,
@@ -114,7 +145,6 @@ export const create = mutation({
       });
     }
 
-    // Generate output channels with bus types and pre-filled names
     const busChannels = generateBusChannelList(config);
     for (let i = 0; i < busChannels.length; i++) {
       await ctx.db.insert("outputChannels", {
@@ -127,11 +157,19 @@ export const create = mutation({
       });
     }
 
+    await logProjectActivity(ctx, {
+      projectId,
+      actorUserId: currentUser.userId,
+      entityType: "project",
+      entityId: String(projectId),
+      action: "created",
+      summary: `Created project "${args.title}"`,
+    });
+
     return projectId;
   },
 });
 
-// Update project
 export const update = mutation({
   args: {
     projectId: v.id("projects"),
@@ -140,60 +178,59 @@ export const update = mutation({
     venue: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-    const project = await ctx.db.get(args.projectId);
-    if (!project) throw new Error("Project not found");
-    if (project.ownerId !== userId && !project.collaborators.includes(userId)) {
-      throw new Error("Not authorized");
-    }
+    const access = await requireProjectRole(ctx, args.projectId, "editor");
     const { projectId, ...updates } = args;
     const filteredUpdates = Object.fromEntries(
-      Object.entries(updates).filter(([_, v]) => v !== undefined)
+      Object.entries(updates).filter(([_, value]) => value !== undefined)
     );
     await ctx.db.patch(projectId, filteredUpdates);
+    await logProjectActivity(ctx, {
+      projectId,
+      actorUserId: access.userId!,
+      entityType: "project",
+      entityId: String(projectId),
+      action: "updated",
+      summary: `Updated project "${access.project.title}"`,
+      metadata: filteredUpdates,
+    });
   },
 });
 
-// Archive project (owner only)
 export const archive = mutation({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-    const project = await ctx.db.get(args.projectId);
-    if (!project) throw new Error("Project not found");
-    if (project.ownerId !== userId) throw new Error("Not authorized");
+    const access = await requireProjectRole(ctx, args.projectId, "owner");
     await ctx.db.patch(args.projectId, { isArchived: true });
+    await logProjectActivity(ctx, {
+      projectId: args.projectId,
+      actorUserId: access.userId!,
+      entityType: "project",
+      entityId: String(args.projectId),
+      action: "archived",
+      summary: `Archived project "${access.project.title}"`,
+    });
   },
 });
 
-// Duplicate project
 export const duplicate = mutation({
   args: {
     projectId: v.id("projects"),
     newTitle: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-    const original = await ctx.db.get(args.projectId);
-    if (!original) throw new Error("Project not found");
-    if (original.ownerId !== userId && !original.collaborators.includes(userId)) {
-      throw new Error("Not authorized");
-    }
+    const access = await requireProjectAccess(ctx, args.projectId);
+    const currentUser = await requireAuthenticatedUser(ctx);
+    const original = access.project;
 
-    // Create new project
     const newProjectId = await ctx.db.insert("projects", {
       title: args.newTitle,
       date: original.date,
       venue: original.venue,
-      ownerId: userId,
+      ownerId: currentUser.userId,
       collaborators: [],
       isArchived: false,
     });
 
-    // Copy mixers
     const mixers = await ctx.db
       .query("mixers")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -209,7 +246,6 @@ export const duplicate = mutation({
       mixerMap.set(_id, newMixerId);
     }
 
-    // Copy IO devices
     const ioDevices = await ctx.db
       .query("ioDevices")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -226,14 +262,13 @@ export const duplicate = mutation({
       });
       ioDeviceMap.set(_id, newIODeviceId);
 
-      // Copy ports
       const ports = await ctx.db
         .query("ioPorts")
         .withIndex("by_ioDevice", (q) => q.eq("ioDeviceId", _id))
         .collect();
 
       for (const port of ports) {
-        const { _id: portId, _creationTime: _, ioDeviceId, ...portData } = port;
+        const { _id: portId, _creationTime, ioDeviceId, ...portData } = port;
         const newPortId = await ctx.db.insert("ioPorts", {
           ...portData,
           ioDeviceId: newIODeviceId as any,
@@ -242,7 +277,6 @@ export const duplicate = mutation({
       }
     }
 
-    // Copy groups
     const groups = await ctx.db
       .query("groups")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -258,14 +292,22 @@ export const duplicate = mutation({
       groupMap.set(_id, newGroupId);
     }
 
-    // Copy input channels
     const inputChannels = await ctx.db
       .query("inputChannels")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
 
     for (const channel of inputChannels) {
-      const { _id, _creationTime, projectId, mixerId, ioPortId, ioPortIdRight, groupId, ...channelData } = channel;
+      const {
+        _id,
+        _creationTime,
+        projectId,
+        mixerId,
+        ioPortId,
+        ioPortIdRight,
+        groupId,
+        ...channelData
+      } = channel;
       await ctx.db.insert("inputChannels", {
         ...channelData,
         projectId: newProjectId,
@@ -276,42 +318,63 @@ export const duplicate = mutation({
       });
     }
 
-    // Copy output channels
     const outputChannels = await ctx.db
       .query("outputChannels")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
 
     for (const channel of outputChannels) {
-      const { _id, _creationTime, projectId, mixerId, ioPortId, ...channelData } = channel;
+      const { _id, _creationTime, projectId, mixerId, ioPortId, ioPortIdRight, ...channelData } = channel;
       await ctx.db.insert("outputChannels", {
         ...channelData,
         projectId: newProjectId,
         mixerId: mixerId ? (mixerMap.get(mixerId) as any) : undefined,
         ioPortId: ioPortId ? (portMap.get(ioPortId) as any) : undefined,
+        ioPortIdRight: ioPortIdRight ? (portMap.get(ioPortIdRight) as any) : undefined,
       });
     }
+
+    await logProjectActivity(ctx, {
+      projectId: newProjectId,
+      actorUserId: currentUser.userId,
+      entityType: "project",
+      entityId: String(newProjectId),
+      action: "created",
+      summary: `Duplicated project "${original.title}" to "${args.newTitle}"`,
+    });
 
     return newProjectId;
   },
 });
 
-// Add collaborator (owner only)
 export const addCollaborator = mutation({
   args: {
     projectId: v.id("projects"),
     collaboratorId: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-    const project = await ctx.db.get(args.projectId);
-    if (!project) throw new Error("Project not found");
-    if (project.ownerId !== userId) throw new Error("Not authorized");
+    const access = await requireProjectRole(ctx, args.projectId, "owner");
+    const existing = await ctx.db
+      .query("projectCollaborators")
+      .withIndex("by_project_and_user", (q) =>
+        q.eq("projectId", args.projectId).eq("userId", args.collaboratorId)
+      )
+      .first();
 
-    if (!project.collaborators.includes(args.collaboratorId)) {
+    if (!existing) {
+      await ctx.db.insert("projectCollaborators", {
+        projectId: args.projectId,
+        userId: args.collaboratorId,
+        role: "editor",
+        invitedBy: access.userId!,
+        createdAt: Date.now(),
+        acceptedAt: Date.now(),
+      });
+    }
+
+    if (!access.project.collaborators.includes(args.collaboratorId)) {
       await ctx.db.patch(args.projectId, {
-        collaborators: [...project.collaborators, args.collaboratorId],
+        collaborators: [...access.project.collaborators, args.collaboratorId],
       });
     }
   },

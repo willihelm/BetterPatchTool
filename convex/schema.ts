@@ -30,6 +30,63 @@ export default defineSchema({
     .index("by_owner_and_archived", ["ownerId", "isArchived"])
     .index("by_archived", ["isArchived"]),
 
+  projectCollaborators: defineTable({
+    projectId: v.id("projects"),
+    userId: v.optional(v.string()),
+    email: v.optional(v.string()),
+    role: v.union(v.literal("viewer"), v.literal("editor")),
+    invitedBy: v.string(),
+    createdAt: v.number(),
+    acceptedAt: v.optional(v.number()),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_and_user", ["projectId", "userId"])
+    .index("by_project_and_email", ["projectId", "email"])
+    .index("by_user", ["userId"])
+    .index("by_email", ["email"]),
+
+  projectShareLinks: defineTable({
+    projectId: v.id("projects"),
+    tokenHash: v.string(),
+    token: v.optional(v.string()),
+    label: v.string(),
+    isRevoked: v.boolean(),
+    createdBy: v.string(),
+    createdAt: v.number(),
+    lastAccessedAt: v.optional(v.number()),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_tokenHash", ["tokenHash"]),
+
+  projectPresence: defineTable({
+    projectId: v.id("projects"),
+    userId: v.string(),
+    sessionId: v.string(),
+    displayName: v.string(),
+    activeArea: v.optional(v.string()),
+    cursor: v.optional(v.object({
+      rowId: v.optional(v.string()),
+      columnKey: v.optional(v.string()),
+    })),
+    lastSeenAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_and_session", ["projectId", "sessionId"])
+    .index("by_session", ["sessionId"]),
+
+  projectActivity: defineTable({
+    projectId: v.id("projects"),
+    actorUserId: v.string(),
+    entityType: v.string(),
+    entityId: v.optional(v.string()),
+    action: v.string(),
+    summary: v.string(),
+    metadata: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_and_createdAt", ["projectId", "createdAt"]),
+
   // Mixers
   mixers: defineTable({
     projectId: v.id("projects"),

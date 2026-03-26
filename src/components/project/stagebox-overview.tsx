@@ -13,11 +13,12 @@ type GroupMode = "device" | "type";
 
 interface StageboxOverviewProps {
   projectId: Id<"projects">;
+  accessToken?: string;
 }
 
-export function StageboxOverview({ projectId }: StageboxOverviewProps) {
+export function StageboxOverview({ projectId, accessToken }: StageboxOverviewProps) {
   const [groupMode, setGroupMode] = useState<GroupMode>("device");
-  const devicesWithPorts = useQuery(api.ioDevices.listWithPorts, { projectId });
+  const devicesWithPorts = useQuery(api.ioDevices.listWithPorts, { projectId, accessToken });
   // Get port usage map from context instead of separate query
   const { portUsageMap, isLoading: portDataLoading } = usePortData();
 

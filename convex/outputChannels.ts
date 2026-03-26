@@ -1,5 +1,13 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import {
+  accessTokenValidator,
+  getProjectAccessForRequest,
+  requireProjectAccess,
+  requireProjectRole,
+  shouldGracefullyHandleTokenAccessLoss,
+} from "./_helpers/projectAccess";
+import { logProjectActivity } from "./_helpers/projectActivity";
 
 type BusType = "group" | "aux" | "fx" | "matrix" | "master" | "cue";
 
@@ -46,13 +54,20 @@ function generateBusChannelList(busConfig: BusConfig): Array<{ busType: BusType;
   return channels;
 }
 
-// Alle Output-Kanäle eines Projekts/Mixers abrufen (sortiert)
 export const list = query({
   args: {
     projectId: v.id("projects"),
     mixerId: v.optional(v.id("mixers")),
+    accessToken: accessTokenValidator,
   },
   handler: async (ctx, args) => {
+    const access = await getProjectAccessForRequest(ctx, args.projectId, args.accessToken);
+    if (!access) {
+      if (shouldGracefullyHandleTokenAccessLoss(args.accessToken)) {
+        return [];
+      }
+      throw new Error("Not authorized");
+    }
     if (args.mixerId) {
       return await ctx.db
         .query("outputChannels")
@@ -66,15 +81,19 @@ export const list = query({
   },
 });
 
-// Einzelnen Output-Kanal abrufen
 export const get = query({
-  args: { channelId: v.id("outputChannels") },
+  args: {
+    channelId: v.id("outputChannels"),
+    accessToken: accessTokenValidator,
+  },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.channelId);
+    const channel = await ctx.db.get(args.channelId);
+    if (!channel) return null;
+    await requireProjectAccess(ctx, channel.projectId, args.accessToken);
+    return channel;
   },
 });
 
-// Neuen Output-Kanal erstellen
 export const create = mutation({
   args: {
     projectId: v.id("projects"),
@@ -95,6 +114,7 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const access = await requireProjectRole(ctx, args.projectId, "editor");
     const latestChannel = args.mixerId
       ? await ctx.db
           .query("outputChannels")
@@ -108,8 +128,7 @@ export const create = mutation({
           .first();
 
     const maxOrder = latestChannel?.order ?? 0;
-
-    return await ctx.db.insert("outputChannels", {
+    const channelId = await ctx.db.insert("outputChannels", {
       projectId: args.projectId,
       order: maxOrder + 1,
       busType: args.busType,
@@ -125,10 +144,18 @@ export const create = mutation({
       cable: args.cable,
       notes: args.notes,
     });
+    await logProjectActivity(ctx, {
+      projectId: args.projectId,
+      actorUserId: access.userId!,
+      entityType: "output_channel",
+      entityId: String(channelId),
+      action: "created",
+      summary: `Created output channel ${args.busName}`,
+    });
+    return channelId;
   },
 });
 
-// Output-Kanal aktualisieren
 export const update = mutation({
   args: {
     channelId: v.id("outputChannels"),
@@ -149,23 +176,44 @@ export const update = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const channel = await ctx.db.get(args.channelId);
+    if (!channel) throw new Error("Channel not found");
+    const access = await requireProjectRole(ctx, channel.projectId, "editor");
     const { channelId, ...updates } = args;
     const filteredUpdates = Object.fromEntries(
-      Object.entries(updates).filter(([_, v]) => v !== undefined)
+      Object.entries(updates).filter(([_, value]) => value !== undefined)
     );
     await ctx.db.patch(channelId, filteredUpdates);
+    await logProjectActivity(ctx, {
+      projectId: channel.projectId,
+      actorUserId: access.userId!,
+      entityType: "output_channel",
+      entityId: String(channelId),
+      action: "updated",
+      summary: `Updated output channel ${channel.busName || channel.order}`,
+      metadata: filteredUpdates,
+    });
   },
 });
 
-// Output-Kanal löschen
 export const remove = mutation({
   args: { channelId: v.id("outputChannels") },
   handler: async (ctx, args) => {
+    const channel = await ctx.db.get(args.channelId);
+    if (!channel) return;
+    const access = await requireProjectRole(ctx, channel.projectId, "editor");
     await ctx.db.delete(args.channelId);
+    await logProjectActivity(ctx, {
+      projectId: channel.projectId,
+      actorUserId: access.userId!,
+      entityType: "output_channel",
+      entityId: String(args.channelId),
+      action: "removed",
+      summary: `Removed output channel ${channel.busName || channel.order}`,
+    });
   },
 });
 
-// Generate empty output channels up to a target count
 export const generateChannelsUpTo = mutation({
   args: {
     projectId: v.id("projects"),
@@ -173,6 +221,7 @@ export const generateChannelsUpTo = mutation({
     targetCount: v.number(),
   },
   handler: async (ctx, args) => {
+    await requireProjectRole(ctx, args.projectId, "editor");
     const existingChannels = args.mixerId
       ? await ctx.db
           .query("outputChannels")
@@ -184,20 +233,15 @@ export const generateChannelsUpTo = mutation({
           .collect();
 
     const currentCount = existingChannels.length;
-
-    // If we already have enough channels, do nothing
     if (currentCount >= args.targetCount) {
       return { added: 0, total: currentCount };
     }
 
-    // Find max order
     const maxOrder = existingChannels.length > 0
-      ? Math.max(...existingChannels.map(c => c.order))
+      ? Math.max(...existingChannels.map((channel) => channel.order))
       : 0;
 
     const channelsToAdd = args.targetCount - currentCount;
-
-    // Insert empty output channels
     for (let i = 0; i < channelsToAdd; i++) {
       await ctx.db.insert("outputChannels", {
         projectId: args.projectId,
@@ -212,7 +256,6 @@ export const generateChannelsUpTo = mutation({
   },
 });
 
-// Bus-Konfiguration für einen Mixer anwenden (Gruppen/Aux/FX/Matrix/Master/Cue)
 export const applyBusConfigToMixer = mutation({
   args: {
     projectId: v.id("projects"),
@@ -220,6 +263,7 @@ export const applyBusConfigToMixer = mutation({
     busConfig: busConfigValidator,
   },
   handler: async (ctx, args) => {
+    const access = await requireProjectRole(ctx, args.projectId, "editor");
     const mixer = await ctx.db.get(args.mixerId);
     if (!mixer || mixer.projectId !== args.projectId) {
       throw new Error("Mixer not found");
@@ -233,12 +277,9 @@ export const applyBusConfigToMixer = mutation({
       .withIndex("by_mixer_and_order", (q) => q.eq("mixerId", args.mixerId))
       .collect();
 
-    // Sort existing channels by order to get a stable sequence
     const sortedExisting = existingChannels.sort((a, b) => a.order - b.order);
-
     const overlapCount = Math.min(sortedExisting.length, desiredBusChannels.length);
 
-    // Update existing channels in-place where possible to preserve routing/patch data
     for (let i = 0; i < overlapCount; i++) {
       const existing = sortedExisting[i];
       const desired = desiredBusChannels[i];
@@ -248,19 +289,16 @@ export const applyBusConfigToMixer = mutation({
       });
     }
 
-    // Remove surplus channels if the new config has fewer buses
     if (sortedExisting.length > desiredBusChannels.length) {
       for (let i = desiredBusChannels.length; i < sortedExisting.length; i++) {
         await ctx.db.delete(sortedExisting[i]._id);
       }
     }
 
-    // Insert additional channels if the new config has more buses
     if (desiredBusChannels.length > sortedExisting.length) {
-      const maxOrder =
-        sortedExisting.length > 0
-          ? Math.max(...sortedExisting.map((c) => c.order))
-          : 0;
+      const maxOrder = sortedExisting.length > 0
+        ? Math.max(...sortedExisting.map((channel) => channel.order))
+        : 0;
 
       for (let i = sortedExisting.length; i < desiredBusChannels.length; i++) {
         const desired = desiredBusChannels[i];
@@ -274,19 +312,24 @@ export const applyBusConfigToMixer = mutation({
         });
       }
     }
+
+    await logProjectActivity(ctx, {
+      projectId: args.projectId,
+      actorUserId: access.userId!,
+      entityType: "output_channel",
+      action: "applied_bus_config",
+      summary: `Applied bus config to mixer ${mixer.name}`,
+    });
   },
 });
 
-// Output-Kanal zwischen Mono und Stereo umschalten
 export const toggleStereo = mutation({
   args: { channelId: v.id("outputChannels") },
   handler: async (ctx, args) => {
     const channel = await ctx.db.get(args.channelId);
     if (!channel) throw new Error("Channel not found");
-
+    const access = await requireProjectRole(ctx, channel.projectId, "editor");
     const newIsStereo = !channel.isStereo;
-
-    // When switching to mono, clear the right fields
     if (newIsStereo) {
       await ctx.db.patch(args.channelId, { isStereo: true });
     } else {
@@ -296,10 +339,17 @@ export const toggleStereo = mutation({
         destinationRight: undefined,
       });
     }
+    await logProjectActivity(ctx, {
+      projectId: channel.projectId,
+      actorUserId: access.userId!,
+      entityType: "output_channel",
+      entityId: String(args.channelId),
+      action: "toggled_stereo",
+      summary: `Toggled stereo for output channel ${channel.busName || channel.order}`,
+    });
   },
 });
 
-// Output-Kanal verschieben
 export const moveChannel = mutation({
   args: {
     channelId: v.id("outputChannels"),
@@ -308,6 +358,7 @@ export const moveChannel = mutation({
   handler: async (ctx, args) => {
     const channel = await ctx.db.get(args.channelId);
     if (!channel) throw new Error("Channel not found");
+    const access = await requireProjectRole(ctx, channel.projectId, "editor");
 
     const allChannels = channel.mixerId
       ? await ctx.db
@@ -318,23 +369,22 @@ export const moveChannel = mutation({
           .query("outputChannels")
           .withIndex("by_project_and_order", (q) => q.eq("projectId", channel.projectId))
           .collect();
-    const currentIndex = allChannels.findIndex(c => c._id === args.channelId);
-
-    const targetIndex = args.direction === "up"
-      ? currentIndex - 1
-      : currentIndex + 1;
-
-    if (targetIndex < 0 || targetIndex >= allChannels.length) {
-      return; // Am Rand, nichts tun
-    }
+    const currentIndex = allChannels.findIndex((row) => row._id === args.channelId);
+    const targetIndex = args.direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= allChannels.length) return;
 
     const targetChannel = allChannels[targetIndex];
-
-    // Inhalte tauschen (nicht die Position)
-    const { _id: _1, _creationTime: _c1, projectId: _p1, order: _, ...currentData } = channel;
-    const { _id: _2, _creationTime: _c2, projectId: _p2, order: __, ...targetData } = targetChannel;
-
+    const { _id, _creationTime, projectId, order, ...currentData } = channel;
+    const { _id: targetId, _creationTime: targetCreatedAt, projectId: targetProjectId, order: targetOrder, ...targetData } = targetChannel;
     await ctx.db.patch(args.channelId, targetData);
     await ctx.db.patch(targetChannel._id, currentData);
+    await logProjectActivity(ctx, {
+      projectId: channel.projectId,
+      actorUserId: access.userId!,
+      entityType: "output_channel",
+      entityId: String(args.channelId),
+      action: "moved",
+      summary: `Moved output channel ${channel.busName || channel.order} ${args.direction}`,
+    });
   },
 });

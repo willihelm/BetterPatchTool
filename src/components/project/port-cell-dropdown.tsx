@@ -48,6 +48,7 @@ interface PortCellDropdownProps {
   onSelect: (portId: string | null, portIdRight?: string | null) => void;
   portType: "input" | "output";
   activeMixerId?: string;
+  disabled?: boolean;
 }
 
 // Generate port pairs for stereo (consecutive ports)
@@ -67,7 +68,7 @@ function getPortPairs(ports: PortGroup["ports"]) {
   return pairs;
 }
 
-export function PortCellDropdown({ row, onSelect, portType, activeMixerId }: PortCellDropdownProps) {
+export function PortCellDropdown({ row, onSelect, portType, activeMixerId, disabled = false }: PortCellDropdownProps) {
   const dropdownContext = useContext(PortDropdownContext);
   const isOpen = dropdownContext?.openRowId === row._id;
 
@@ -78,6 +79,7 @@ export function PortCellDropdown({ row, onSelect, portType, activeMixerId }: Por
   };
 
   const onOpenChange = (open: boolean) => {
+    if (disabled) return;
     // Prevent reopening immediately after a selection (handles Space keyup triggering button)
     if (open && isWithinBlockWindow()) {
       return;
@@ -182,9 +184,10 @@ export function PortCellDropdown({ row, onSelect, portType, activeMixerId }: Por
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex items-center justify-between h-full w-full px-2 cursor-pointer hover:bg-muted/50 rounded focus:outline-none"
+            className="flex items-center justify-between h-full w-full px-2 cursor-pointer hover:bg-muted/50 rounded focus:outline-none disabled:cursor-default"
             onKeyDown={handleTriggerKeyDown}
             onKeyUp={handleTriggerKeyUp}
+            disabled={disabled}
           >
             <div className="flex flex-col gap-1 py-1 min-h-[48px] justify-center">
               {portInfo ? (
@@ -276,13 +279,14 @@ export function PortCellDropdown({ row, onSelect, portType, activeMixerId }: Por
   // Mono port selector
   return (
     <DropdownMenu open={isOpen} onOpenChange={onOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="flex items-center justify-between h-full w-full px-2 cursor-pointer hover:bg-muted/50 rounded focus:outline-none"
-          onKeyDown={handleTriggerKeyDown}
-          onKeyUp={handleTriggerKeyUp}
-        >
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="flex items-center justify-between h-full w-full px-2 cursor-pointer hover:bg-muted/50 rounded focus:outline-none disabled:cursor-default"
+            onKeyDown={handleTriggerKeyDown}
+            onKeyUp={handleTriggerKeyUp}
+            disabled={disabled}
+          >
           <div className="min-h-[24px] flex items-center">
             {portInfo ? (
               <Badge
