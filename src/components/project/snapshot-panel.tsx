@@ -27,14 +27,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "@/lib/date-utils";
 import { SnapshotDiffDialog } from "./snapshot-diff-dialog";
+import { cn } from "@/lib/utils";
 import type { ProjectSnapshot } from "@/types/convex";
 
 interface SnapshotPanelProps {
   projectId: Id<"projects">;
   onRestored?: (snapshotName: string) => void;
+  triggerClassName?: string;
 }
 
-export function SnapshotPanel({ projectId, onRestored }: SnapshotPanelProps) {
+export function SnapshotPanel({ projectId, onRestored, triggerClassName }: SnapshotPanelProps) {
   const snapshots = useQuery(api.snapshots.list, { projectId }) as ProjectSnapshot[] | undefined;
   const createSnapshot = useMutation(api.snapshots.create);
   const restoreSnapshot = useMutation(api.snapshots.restore);
@@ -107,7 +109,7 @@ export function SnapshotPanel({ projectId, onRestored }: SnapshotPanelProps) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className={cn("gap-2", triggerClassName)}>
             <Save className="h-4 w-4" />
             <ChevronDown className="h-3 w-3 opacity-50" />
           </Button>

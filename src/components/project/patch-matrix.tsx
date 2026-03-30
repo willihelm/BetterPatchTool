@@ -679,8 +679,8 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex items-center justify-between gap-6">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
             <button
               onClick={() => setChannelType("input")}
@@ -705,9 +705,9 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button variant="outline" size="sm" className="h-10 gap-2">
                 <Filter className="h-4 w-4" />
-                <span>Devices</span>
+                <span className="hidden sm:inline">Devices</span>
                 <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
                   {selectedDeviceIds.size}/{portGroups.length}
                 </Badge>
@@ -758,11 +758,12 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
               onChange={(e) => setShowUnassignedOnly(e.target.checked)}
               className="h-4 w-4 rounded border-gray-300"
             />
-            Show unassigned ports only
+            <span className="sm:hidden">Unassigned only</span>
+            <span className="hidden sm:inline">Show unassigned ports only</span>
           </label>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
+          <span className="hidden text-xs text-muted-foreground xl:inline">
             Arrow keys navigate · Space/Enter toggle · Shift+Click diagonal · Esc deselect
           </span>
           <Button
@@ -770,10 +771,11 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
             size="sm"
             onClick={() => setShowGlobalClearDialog(true)}
             disabled={getGlobalClearCount === 0}
-            className="text-destructive"
+            className="h-10 w-full text-destructive sm:w-auto"
           >
             <Trash2 className="h-4 w-4 mr-2" />
-            Clear All Patches
+            <span className="sm:hidden">Clear</span>
+            <span className="hidden sm:inline">Clear All Patches</span>
           </Button>
         </div>
       </div>
@@ -787,7 +789,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
         <TooltipProvider delayDuration={200}>
           <div
             ref={containerRef}
-            className="border rounded-lg overflow-auto focus:outline-none max-h-[calc(100vh-300px)] select-none"
+            className="border rounded-lg overflow-auto focus:outline-none h-[calc(100dvh-240px)] min-h-[420px] select-none"
             tabIndex={0}
             onKeyDown={handleKeyDown}
             onMouseDown={(e) => {

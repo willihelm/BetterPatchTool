@@ -54,7 +54,7 @@ export function NewProjectContent() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
-        <div className="container mx-auto px-4 py-4 flex items-center gap-4">
+        <div className="container mx-auto flex flex-col items-start gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:py-4">
           <Link href="/dashboard" className="shrink-0">
             <Image
               src="/brand/betterpatchtool-logo-a-light.svg"
@@ -62,7 +62,7 @@ export function NewProjectContent() {
               width={140}
               height={32}
               priority
-              className="dark:hidden"
+              className="h-auto w-[140px] dark:hidden sm:w-[150px]"
             />
             <Image
               src="/brand/betterpatchtool-logo-a-dark.svg"
@@ -70,11 +70,11 @@ export function NewProjectContent() {
               width={140}
               height={32}
               priority
-              className="hidden dark:block"
+              className="hidden h-auto w-[140px] dark:block sm:w-[150px]"
             />
           </Link>
-          <div className="border-l pl-4">
-            <h1 className="text-2xl font-bold">Create New Project</h1>
+          <div className="w-full border-t pt-3 sm:w-auto sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+            <h1 className="text-xl font-bold sm:text-2xl">Create New Project</h1>
           </div>
         </div>
       </header>

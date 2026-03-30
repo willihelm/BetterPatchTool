@@ -11,7 +11,6 @@ import { StageboxOverview } from "@/components/project/stagebox-overview";
 import { PortDataProvider } from "@/components/project/port-data-context";
 import { ActiveMixerProvider } from "@/components/project/active-mixer-context";
 import { ProjectAccessProvider } from "@/components/project/project-access-context";
-import { ProjectPresenceStrip } from "@/components/project/project-presence-strip";
 import { UndoRedoProvider } from "@/hooks/use-undo-redo";
 import type { Project } from "@/types/convex";
 
@@ -40,18 +39,23 @@ export default function SharedProjectPage() {
           <UndoRedoProvider>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <div className="min-h-screen bg-background flex flex-col">
-                <header className="border-b bg-background px-4 py-4">
-                  <h1 className="text-xl font-semibold">{resolved.project.title}</h1>
-                  <p className="text-sm text-muted-foreground">
-                    Public read-only share link
-                  </p>
-                  <div className="mt-2">
-                    <ProjectPresenceStrip projectId={projectId} activeArea={activeTab} />
+                <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                  <div className="container mx-auto flex flex-col gap-3 px-4 py-3 sm:gap-4 sm:py-4">
+                    <div className="min-w-0">
+                      <h1 className="truncate text-lg font-semibold sm:text-xl">{resolved.project.title}</h1>
+                      <p className="text-sm text-muted-foreground">
+                        Public read-only share link
+                      </p>
+                    </div>
+                    <div className="relative mt-1 sm:mt-0">
+                      <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        <TabsList className="h-auto min-w-max justify-start gap-1 p-1">
+                          <TabsTrigger value="patch-list">Patch List</TabsTrigger>
+                          <TabsTrigger value="stageboxes">Stageboxes</TabsTrigger>
+                        </TabsList>
+                      </div>
+                    </div>
                   </div>
-                  <TabsList className="mt-4">
-                    <TabsTrigger value="patch-list">Patch List</TabsTrigger>
-                    <TabsTrigger value="stageboxes">Stageboxes</TabsTrigger>
-                  </TabsList>
                 </header>
 
                 <main className="container mx-auto flex-1 px-4 py-4">

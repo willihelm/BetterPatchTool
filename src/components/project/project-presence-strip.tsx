@@ -59,18 +59,15 @@ export function ProjectPresenceStrip({
   );
 
   if (!presence) return null;
+  if (others.length === 0) return null;
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto">
-      <Badge variant="outline">{accessRole === "share_viewer" ? "View only" : accessRole}</Badge>
-      {others.length > 0 &&
-        others.map((entry) => (
-          <Badge key={entry._id} variant="secondary" className="whitespace-nowrap">
-            {entry.displayName}
-            {entry.activeArea ? ` · ${entry.activeArea}` : ""}
-          </Badge>
-        ))
-      }
+      {others.map((entry) => (
+        <Badge key={entry._id} variant="secondary" className="whitespace-nowrap">
+          {entry.displayName}
+        </Badge>
+      ))}
     </div>
   );
 }

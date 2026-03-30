@@ -11,8 +11,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
-export function ThemeSwitcher() {
+interface ThemeSwitcherProps {
+  buttonClassName?: string;
+}
+
+export function ThemeSwitcher({ buttonClassName }: ThemeSwitcherProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
 
@@ -23,8 +28,9 @@ export function ThemeSwitcher() {
 
   if (!mounted) {
     return (
-      <Button variant="ghost" size="icon">
+      <Button variant="ghost" size="icon" className={cn(buttonClassName)}>
         <Sun className="h-4 w-4" />
+        <span className="sr-only">Toggle theme</span>
       </Button>
     );
   }
@@ -32,7 +38,7 @@ export function ThemeSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon">
+        <Button variant="ghost" size="icon" className={cn(buttonClassName)}>
           {theme === "dark" ? (
             <Moon className="h-4 w-4" />
           ) : theme === "light" ? (

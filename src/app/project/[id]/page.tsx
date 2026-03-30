@@ -33,7 +33,6 @@ import { PDFExportDialog } from "@/components/project/pdf-export-dialog";
 import { SnapshotPanel } from "@/components/project/snapshot-panel";
 import { UndoRedoProvider, UndoRedoButtons } from "@/hooks/use-undo-redo";
 import { ProjectAccessProvider } from "@/components/project/project-access-context";
-import { ProjectPresenceStrip } from "@/components/project/project-presence-strip";
 import { CollaborationDialog } from "@/components/project/collaboration-dialog";
 import { ProjectActivitySheet } from "@/components/project/project-activity-sheet";
 import type { Project, Mixer } from "@/types/convex";
@@ -118,111 +117,119 @@ function ProjectPageContent({
   return (
     <Tabs defaultValue="patch-list" value={activeTab} onValueChange={setActiveTab}>
       <div className="min-h-screen bg-background flex flex-col">
-        <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-          <div className="container mx-auto px-4 py-2">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4 min-w-0 flex-1">
-                <Link href="/dashboard" className="shrink-0">
-                  <Image
-                    src="/brand/betterpatchtool-logo-a-light.svg"
-                    alt="BetterPatchTool"
-                    width={210}
-                    height={48}
-                    priority
-                    className="dark:hidden"
-                  />
-                  <Image
-                    src="/brand/betterpatchtool-logo-a-dark.svg"
-                    alt="BetterPatchTool"
-                    width={210}
-                    height={48}
-                    priority
-                    className="hidden dark:block"
-                  />
-                </Link>
-                <div className="border-l pl-4 min-w-0">
-                  <h1 className="text-lg font-semibold truncate">{project.title}</h1>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    {project.date && <span>{project.date}</span>}
-                    {project.venue && (
-                      <>
-                        {project.date && <span>·</span>}
-                        <span>{project.venue}</span>
-                      </>
+        <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="container mx-auto px-4 py-2.5 sm:py-3">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+                  <Link href="/dashboard" className="shrink-0">
+                    <Image
+                      src="/brand/betterpatchtool-logo-a-light.svg"
+                      alt="BetterPatchTool"
+                      width={210}
+                      height={48}
+                      priority
+                      className="h-auto w-[150px] dark:hidden sm:w-[180px] md:w-[210px]"
+                    />
+                    <Image
+                      src="/brand/betterpatchtool-logo-a-dark.svg"
+                      alt="BetterPatchTool"
+                      width={210}
+                      height={48}
+                      priority
+                      className="hidden h-auto w-[150px] dark:block sm:w-[180px] md:w-[210px]"
+                    />
+                  </Link>
+                  <div className="min-w-0 flex-1 border-t pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+                    <h1 className="truncate text-lg font-semibold">{project.title}</h1>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                      {project.date && <span>{project.date}</span>}
+                      {project.venue && (
+                        <>
+                          {project.date && <span>·</span>}
+                          <span>{project.venue}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-start gap-1 sm:gap-2 lg:max-w-[45%] lg:justify-end">
+                  <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                    <MixerSelector onOpenSettings={handleOpenMixerSettings} />
+                    {!readOnly && <UndoRedoButtons />}
+                    {!readOnly && (
+                      <SnapshotPanel
+                        projectId={projectId}
+                        triggerClassName="h-10 px-3 sm:h-9"
+                        onRestored={(name) => setRestoreMessage(`Projekt auf Savepoint "${name}" zurückgesetzt.`)}
+                      />
                     )}
                   </div>
-                  <div className="mt-2">
-                    <ProjectPresenceStrip projectId={projectId} activeArea={activeTab} />
+                  <div className="ml-0 border-l pl-2 sm:ml-1 sm:pl-3">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-10 w-10 sm:h-9 sm:w-9">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setExportDialogOpen(true)}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Export PDF
+                        </DropdownMenuItem>
+                        {canManageCollaboration && (
+                          <DropdownMenuItem onClick={() => setCollaborationOpen(true)}>
+                            <Users className="mr-2 h-4 w-4" />
+                            Collaborators
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => setActivityOpen(true)}>
+                          <History className="mr-2 h-4 w-4" />
+                          Activity
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            {theme === "dark" ? (
+                              <Moon className="mr-2 h-4 w-4" />
+                            ) : theme === "light" ? (
+                              <Sun className="mr-2 h-4 w-4" />
+                            ) : (
+                              <Monitor className="mr-2 h-4 w-4" />
+                            )}
+                            Theme
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            <DropdownMenuItem onClick={() => setTheme("light")}>
+                              <Sun className="mr-2 h-4 w-4" />
+                              Light
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setTheme("dark")}>
+                              <Moon className="mr-2 h-4 w-4" />
+                              Dark
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setTheme("system")}>
+                              <Monitor className="mr-2 h-4 w-4" />
+                              System
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </div>
 
-              <TabsList className="shrink-0">
-                <TabsTrigger value="patch-list">Patch List</TabsTrigger>
-                <TabsTrigger value="matrix">Matrix</TabsTrigger>
-                <TabsTrigger value="stageboxes">Stageboxes</TabsTrigger>
-                {!readOnly && <TabsTrigger value="io-devices">Devices</TabsTrigger>}
-              </TabsList>
-
-              <div className="flex items-center gap-1 flex-1 justify-end">
-                <MixerSelector onOpenSettings={handleOpenMixerSettings} />
-                {!readOnly && <UndoRedoButtons />}
-                {!readOnly && (
-                  <SnapshotPanel
-                    projectId={projectId}
-                    onRestored={(name) => setRestoreMessage(`Projekt auf Savepoint "${name}" zurückgesetzt.`)}
-                  />
-                )}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setExportDialogOpen(true)}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Export PDF
-                    </DropdownMenuItem>
-                    {canManageCollaboration && (
-                      <DropdownMenuItem onClick={() => setCollaborationOpen(true)}>
-                        <Users className="mr-2 h-4 w-4" />
-                        Collaborators
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem onClick={() => setActivityOpen(true)}>
-                      <History className="mr-2 h-4 w-4" />
-                      Activity
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger>
-                        {theme === "dark" ? (
-                          <Moon className="mr-2 h-4 w-4" />
-                        ) : theme === "light" ? (
-                          <Sun className="mr-2 h-4 w-4" />
-                        ) : (
-                          <Monitor className="mr-2 h-4 w-4" />
-                        )}
-                        Theme
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent>
-                        <DropdownMenuItem onClick={() => setTheme("light")}>
-                          <Sun className="mr-2 h-4 w-4" />
-                          Light
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setTheme("dark")}>
-                          <Moon className="mr-2 h-4 w-4" />
-                          Dark
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setTheme("system")}>
-                          <Monitor className="mr-2 h-4 w-4" />
-                          System
-                        </DropdownMenuItem>
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+              <div className="relative">
+                <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <TabsList className="h-auto min-w-max justify-start gap-1 p-1">
+                    <TabsTrigger value="patch-list">Patch List</TabsTrigger>
+                    <TabsTrigger value="matrix">Matrix</TabsTrigger>
+                    <TabsTrigger value="stageboxes">Stageboxes</TabsTrigger>
+                    {!readOnly && <TabsTrigger value="io-devices">Devices</TabsTrigger>}
+                  </TabsList>
+                </div>
               </div>
             </div>
           </div>

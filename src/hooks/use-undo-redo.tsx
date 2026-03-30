@@ -114,6 +114,7 @@ export function UndoRedoButtons() {
       <Button
         variant="ghost"
         size="icon"
+        className="h-10 w-10 sm:h-9 sm:w-9"
         onClick={context.undo}
         disabled={undoCount === 0}
         title="Undo (Cmd+Z)"
@@ -123,6 +124,7 @@ export function UndoRedoButtons() {
       <Button
         variant="ghost"
         size="icon"
+        className="h-10 w-10 sm:h-9 sm:w-9"
         onClick={context.redo}
         disabled={redoCount === 0}
         title="Redo (Cmd+Shift+Z)"

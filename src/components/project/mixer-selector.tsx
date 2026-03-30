@@ -24,7 +24,10 @@ export function MixerSelector({ onOpenSettings }: MixerSelectorProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="hidden max-w-44 lg:flex gap-1.5 h-7 px-2.5">
+        <Button
+          variant="outline"
+          className="hidden h-10 max-w-40 gap-1.5 px-3 md:flex lg:h-9 lg:max-w-44 lg:px-2.5"
+        >
           <span className="truncate font-medium">{activeMixer.name}</span>
           <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
         </Button>
@@ -48,7 +51,7 @@ export function MixerSelector({ onOpenSettings }: MixerSelectorProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 shrink-0"
+                className="h-8 w-8 shrink-0"
                 onClick={(e) => {
                   e.stopPropagation();
                   onOpenSettings(mixer._id as Id<"mixers">);
