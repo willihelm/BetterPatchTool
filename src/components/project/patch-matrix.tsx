@@ -918,9 +918,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           <tbody>
             {channels.map((channel, rowIndex) => {
               const orig = channel.originalChannel;
-              const channelNumber = channelType === "input"
-                ? (orig as { channelNumber?: number }).channelNumber ?? rowIndex + 1
-                : rowIndex + 1;
+              const channelNumber = (orig as { channelNumber?: number }).channelNumber ?? rowIndex + 1;
               const channelName = channelType === "input"
                 ? (orig as { source?: string }).source
                 : (orig as { busName?: string }).busName;
@@ -937,9 +935,11 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
                     )}
                   >
                     <div className="flex items-center gap-1">
-                      <span className="font-mono font-medium w-6 text-right shrink-0">
-                        {channelNumber}
-                      </span>
+                      {channelType === "input" && (
+                        <span className="font-mono font-medium w-6 text-right shrink-0">
+                          {channelNumber}
+                        </span>
+                      )}
                       {isEditingThisChannel ? (
                         <Input
                           autoFocus
