@@ -156,7 +156,6 @@ function ProjectPageContent({
 
                 <div className="flex flex-wrap items-center justify-start gap-1 sm:gap-2 lg:max-w-[45%] lg:justify-end">
                   <div className="flex flex-wrap items-center gap-1 sm:gap-2">
-                    <MixerSelector onOpenSettings={handleOpenMixerSettings} />
                     {!readOnly && <UndoRedoButtons />}
                     {!readOnly && (
                       <SnapshotPanel
@@ -165,6 +164,7 @@ function ProjectPageContent({
                         onRestored={(name) => setRestoreMessage(`Projekt auf Savepoint "${name}" zurückgesetzt.`)}
                       />
                     )}
+                    <MixerSelector onOpenSettings={handleOpenMixerSettings} />
                   </div>
                   <div className="ml-0 border-l pl-2 sm:ml-1 sm:pl-3">
                     <DropdownMenu>
