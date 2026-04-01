@@ -73,6 +73,74 @@ bun run test:e2e
 
 Playwright uses `http://localhost:3000` and will start the Next.js dev server automatically if needed.
 
+## MCP v1 (MCP Editing)
+
+This repo includes an MCP endpoint for AI agents:
+
+- Endpoint: `POST /api/mcp`
+- Transport: Streamable HTTP (JSON-RPC style MCP requests)
+- Auth:
+  - OAuth (GitHub) session or OAuth bearer token
+  - Client Credentials (`client_id` + `client_secret`) from app settings
+
+### Setup
+
+1. Configure GitHub OAuth on your Convex deployment (`AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`).
+2. Set a pepper for hashing MCP client secrets:
+   ```bash
+   bunx convex env set MCP_TOKEN_PEPPER "$(openssl rand -base64 32)"
+   ```
+   Use at least 32 bytes of cryptographically secure randomness for `MCP_TOKEN_PEPPER`.
+3. Sign in to BetterPatchTool via GitHub OAuth.
+4. Open `/settings/mcp-access` and create MCP client credentials for your MCP client (e.g. Claude Code).
+5. Call MCP either:
+   - with authenticated session (cookies) / OAuth bearer token, or
+   - with HTTP Basic auth using `client_id:client_secret`.
+
+### Claude Desktop example
+
+Use an MCP server entry that points to your running Next.js app and provide your generated credentials:
+Use HTTPS in production to protect Basic auth credentials in transit.
+
+```json
+{
+  "mcpServers": {
+    "betterpatchtool": {
+      "url": "http://localhost:3000/api/mcp",
+      "headers": {
+        "Authorization": "Basic <base64(client_id:client_secret)>"
+      }
+    }
+  }
+}
+```
+
+Generate the header value with:
+
+```bash
+echo -n "<client_id>:<client_secret>" | base64
+```
+
+### cURL example (Basic auth)
+
+```bash
+curl -X POST http://localhost:3000/api/mcp \
+  -H "Content-Type: application/json" \
+  -u "<client_id>:<client_secret>" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+### Tool allowlist
+
+- `list_projects`
+- `get_project`
+- `list_input_channels`
+- `list_output_channels`
+- `list_io_devices_with_ports`
+- `update_project_meta`
+- `update_input_channel`
+- `update_output_channel`
+
 ## Project Structure
 
 - `src/app` - Next.js app routes

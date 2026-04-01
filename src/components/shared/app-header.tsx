@@ -26,6 +26,7 @@ export function AppHeader({ actions }: AppHeaderProps) {
   const pathname = usePathname();
   const isDashboard = pathname === "/dashboard";
   const isInventory = pathname === "/inventory";
+  const isMcpAccess = pathname === "/settings/mcp-access";
 
   return (
     <header className="border-b">
@@ -56,6 +57,9 @@ export function AppHeader({ actions }: AppHeaderProps) {
               </Button>
               <Button variant="ghost" size="sm" asChild className={cn(isInventory && "bg-muted")}>
                 <Link href="/inventory">Inventory</Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild className={cn(isMcpAccess && "bg-muted")}>
+                <Link href="/settings/mcp-access">MCP Access</Link>
               </Button>
             </nav>
           </div>
@@ -97,6 +101,11 @@ export function AppHeader({ actions }: AppHeaderProps) {
                   <SheetClose asChild>
                     <Button variant={isInventory ? "secondary" : "ghost"} className="w-full justify-start" asChild>
                       <Link href="/inventory">Inventory</Link>
+                    </Button>
+                  </SheetClose>
+                  <SheetClose asChild>
+                    <Button variant={isMcpAccess ? "secondary" : "ghost"} className="w-full justify-start" asChild>
+                      <Link href="/settings/mcp-access">MCP Access</Link>
                     </Button>
                   </SheetClose>
                 </div>

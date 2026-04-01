@@ -58,6 +58,20 @@ export default defineSchema({
     .index("by_project", ["projectId"])
     .index("by_tokenHash", ["tokenHash"]),
 
+  // MCP client credentials used for Basic auth with MCP clients.
+  mcpCredentials: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    clientId: v.string(),
+    clientSecretHash: v.string(),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_clientId", ["clientId"])
+    .index("by_user_and_revokedAt", ["userId", "revokedAt"]),
+
   projectPresence: defineTable({
     projectId: v.id("projects"),
     userId: v.string(),

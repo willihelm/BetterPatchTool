@@ -229,3 +229,15 @@ export interface ProjectActivityEntry {
   metadata?: Record<string, unknown>;
   createdAt: number;
 }
+
+export interface McpCredential {
+  _id: string;
+  _creationTime: number;
+  userId: string;
+  name: string;
+  clientId: string;
+  clientSecretHash: string;
+  createdAt: number;
+  lastUsedAt?: number;
+  revokedAt?: number;
+}
