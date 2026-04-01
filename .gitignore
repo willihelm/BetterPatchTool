@@ -48,3 +48,6 @@ playwright-report
 .claude/
 
 certificates
+
+.agents/
+convex/_generated/
