@@ -23,7 +23,9 @@ cp .env.local.example .env.local
 
 3. Set `NEXT_PUBLIC_CONVEX_URL` in `.env.local` to your Convex deployment URL.
 
-4. Start the frontend:
+4. If you use auth, set `NEXT_PUBLIC_CONVEX_SITE_URL` to your Convex site URL in your Convex deployment environment, and set the same value locally when running `bunx convex dev`.
+
+5. Start the frontend:
 
 ```bash
 bun run dev
@@ -42,7 +44,8 @@ bunx convex dev
 Notes:
 
 - `NEXT_PUBLIC_CONVEX_URL` is required for the app to connect to Convex from the browser.
-- GitHub OAuth values mentioned in `.env.local.example` should be configured in the Convex dashboard, not in `.env.local`.
+- GitHub OAuth values should be configured in the Convex dashboard.
+- `NEXT_PUBLIC_CONVEX_SITE_URL` should be set in Convex env, and mirrored in `.env.local` for local auth/dev flows.
 
 ## Available Scripts
 
@@ -86,14 +89,15 @@ This repo includes an MCP endpoint for AI agents:
 ### Setup
 
 1. Configure GitHub OAuth on your Convex deployment (`AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`).
-2. Set a pepper for hashing MCP client secrets:
+2. Set `NEXT_PUBLIC_CONVEX_SITE_URL` on the same Convex deployment to `https://<your-deployment>.convex.site`.
+3. Set a pepper for hashing MCP client secrets:
    ```bash
    bunx convex env set MCP_TOKEN_PEPPER "$(openssl rand -base64 32)"
    ```
    Use at least 32 bytes of cryptographically secure randomness for `MCP_TOKEN_PEPPER`.
-3. Sign in to BetterPatchTool via GitHub OAuth.
-4. Open `/settings/mcp-access` and create MCP client credentials for your MCP client (e.g. Claude Code).
-5. Call MCP either:
+4. Sign in to BetterPatchTool via GitHub OAuth.
+5. Open `/settings/mcp-access` and create MCP client credentials for your MCP client (e.g. Claude Code).
+6. Call MCP either:
    - with authenticated session (cookies) / OAuth bearer token, or
    - with HTTP Basic auth using `client_id:client_secret`.
 
