@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { useChannelSelection } from "./use-channel-selection";
 import { AutoPatchDialog } from "./auto-patch-dialog";
 import { incrementTrailingNumber } from "@/lib/string-utils";
+import { normalizeOutputUpdateValue } from "@/lib/channel-update-value";
 import { PortCellDropdown, PortDropdownContext, SELECTION_BLOCK_WINDOW, lastPortSelectionTimestamp } from "./port-cell-dropdown";
 import { TextCell, type OutputChannelRow } from "./channel-table-shared";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
@@ -123,11 +124,13 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
       const value = row[columnKey as keyof OutputChannelRow];
       const originalValue = originalRow[columnKey as keyof OutputChannelRow];
       if (value !== originalValue) {
-        updateChannel({ channelId, [columnKey]: value || undefined });
+        const normalizedValue = normalizeOutputUpdateValue(columnKey, value);
+        const normalizedOriginalValue = normalizeOutputUpdateValue(columnKey, originalValue);
+        updateChannel({ channelId, [columnKey]: normalizedValue });
         pushAction({
           label: `Edit ${columnKey}`,
-          undo: async () => { await updateChannel({ channelId, [columnKey]: originalValue || undefined }); },
-          redo: async () => { await updateChannel({ channelId, [columnKey]: value || undefined }); },
+          undo: async () => { await updateChannel({ channelId, [columnKey]: normalizedOriginalValue }); },
+          redo: async () => { await updateChannel({ channelId, [columnKey]: normalizedValue }); },
         });
       }
     }
@@ -408,9 +411,11 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
 
           const id = row._id as Id<"outputChannels">;
           const oldValue = row[column.key as keyof OutputChannelRow];
+          const normalizedNewValue = normalizeOutputUpdateValue(column.key, newValue);
+          const normalizedOldValue = normalizeOutputUpdateValue(column.key, oldValue);
           updateChannel({
             channelId: id,
-            [column.key]: newValue || undefined,
+            [column.key]: normalizedNewValue,
           }).then(() => {
             setTimeout(() => {
               const grid = gridRef.current?.querySelector('[role="grid"]');
@@ -428,8 +433,8 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
           });
           pushAction({
             label: "Copy+increment",
-            undo: async () => { await updateChannel({ channelId: id, [column.key]: oldValue || undefined }); },
-            redo: async () => { await updateChannel({ channelId: id, [column.key]: newValue || undefined }); },
+            undo: async () => { await updateChannel({ channelId: id, [column.key]: normalizedOldValue }); },
+            redo: async () => { await updateChannel({ channelId: id, [column.key]: normalizedNewValue }); },
           });
         }
       }
