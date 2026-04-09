@@ -33,6 +33,20 @@ interface OutputChannelTableProps {
   readOnly?: boolean;
 }
 
+const BUS_TYPE_LABELS: Record<NonNullable<OutputChannelRow["busType"]>, string> = {
+  group: "Grp",
+  aux: "Aux",
+  fx: "FX",
+  matrix: "Mtx",
+  master: "Master",
+  cue: "Cue",
+};
+
+function getOutputNumberLabel(row: OutputChannelRow): string {
+  const typeLabel = row.busType ? BUS_TYPE_LABELS[row.busType] : "Out";
+  return `${typeLabel} ${row.busTypeNumber}`;
+}
+
 export function OutputChannelTable({ projectId, mixerId, channelType, onChannelTypeChange, accessToken, readOnly = false }: OutputChannelTableProps) {
   const channels = useQuery(api.outputChannels.list, { projectId, mixerId: mixerId ?? undefined, accessToken });
   const mixers = useQuery(api.mixers.list, { projectId, accessToken });
@@ -63,20 +77,27 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
   // Convert channels to rows
   const rows: OutputChannelRow[] = useMemo(() => {
     if (!channels) return [];
-    return channels.map((channel, index) => ({
-      _id: channel._id,
-      rowNumber: index + 1,
-      busType: channel.busType,
-      ioPortId: channel.ioPortId,
-      ioPortIdRight: channel.ioPortIdRight,
-      isStereo: channel.isStereo,
-      busName: channel.busName,
-      destination: channel.destination,
-      ampProcessor: channel.ampProcessor ?? "",
-      location: channel.location ?? "",
-      cable: channel.cable ?? "",
-      notes: channel.notes ?? "",
-    }));
+    const typeCounts: Record<string, number> = {};
+    return channels.map((channel, index) => {
+      const typeKey = channel.busType ?? "out";
+      typeCounts[typeKey] = (typeCounts[typeKey] ?? 0) + 1;
+
+      return {
+        _id: channel._id,
+        rowNumber: index + 1,
+        busTypeNumber: typeCounts[typeKey],
+        busType: channel.busType,
+        ioPortId: channel.ioPortId,
+        ioPortIdRight: channel.ioPortIdRight,
+        isStereo: channel.isStereo,
+        busName: channel.busName,
+        destination: channel.destination,
+        ampProcessor: channel.ampProcessor ?? "",
+        location: channel.location ?? "",
+        cable: channel.cable ?? "",
+        notes: channel.notes ?? "",
+      };
+    });
   }, [channels]);
   rowsRef.current = rows;
 
@@ -197,12 +218,12 @@ export function OutputChannelTable({ projectId, mixerId, channelType, onChannelT
     {
       key: "rowNumber",
       name: "#",
-      width: 64,
+      width: 92,
       frozen: true,
       cellClass: "text-center font-mono text-sm",
       headerCellClass: "text-center",
       renderCell: ({ row }: { row: OutputChannelRow }) => (
-        <span>{row.busName || row.rowNumber}</span>
+        <span>{getOutputNumberLabel(row)}</span>
       ),
     },
     {
