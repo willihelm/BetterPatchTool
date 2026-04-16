@@ -3,6 +3,7 @@ import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
 import { ConvexHttpClient } from "convex/browser";
 
 const MAX_BATCH_REQUESTS = 20;
+const ENABLE_MCP_DEBUG_LOGS = process.env.MCP_DEBUG_LOGS === "1";
 
 type JsonRpcId = string | number | null;
 
@@ -16,6 +17,12 @@ type JsonRpcRequest = {
 type McpAuth =
   | { kind: "oauth"; token: string }
   | { kind: "client_credentials"; clientId: string; clientSecret: string };
+
+function mcpLog(event: string, details?: Record<string, unknown>) {
+  if (!ENABLE_MCP_DEBUG_LOGS) return;
+  const timestamp = new Date().toISOString();
+  console.info(`[mcp-route] ${timestamp} ${event}`, details ?? {});
+}
 
 function jsonRpcResult(id: JsonRpcId, result: unknown) {
   return { jsonrpc: "2.0", id, result };
@@ -202,6 +209,13 @@ function getTools() {
 
 async function handleSingleRequest(req: JsonRpcRequest, auth: McpAuth | null) {
   const id = req.id ?? null;
+  mcpLog("handle_single_request", {
+    id,
+    method: req.method ?? null,
+    hasAuth: Boolean(auth),
+    authKind: auth?.kind ?? null,
+  });
+
   if (req.jsonrpc !== "2.0") {
     return jsonRpcError(id, -32600, "Invalid Request");
   }
@@ -242,9 +256,16 @@ async function handleSingleRequest(req: JsonRpcRequest, auth: McpAuth | null) {
       return jsonRpcError(id, -32602, "invalid_arguments", { code: "invalid_arguments" });
     }
     const toolArgs = rawArgs as Record<string, unknown> | undefined;
+    mcpLog("tools_call_received", {
+      id,
+      toolName,
+      authKind: auth.kind,
+      argKeys: Object.keys(toolArgs ?? {}),
+    });
 
     const convex = getConvexClient();
     if (!convex) {
+      mcpLog("missing_convex_url", { id, toolName });
       return jsonRpcError(id, -32603, "MCP endpoint is not configured", {
         code: "internal_error",
       });
@@ -267,12 +288,26 @@ async function handleSingleRequest(req: JsonRpcRequest, auth: McpAuth | null) {
               args: toolArgs ?? {},
             });
 
+      mcpLog("tools_call_success", {
+        id,
+        toolName,
+        authKind: auth.kind,
+        resultType: Array.isArray(result) ? "array" : typeof result,
+      });
+
       return jsonRpcResult(id, {
         content: [{ type: "text", text: JSON.stringify(result) }],
         structuredContent: result,
       });
     } catch (error) {
       const parsed = parseMcpError(error);
+      mcpLog("tools_call_error", {
+        id,
+        toolName,
+        authKind: auth.kind,
+        errorKind: parsed.kind,
+        errorMessage: parsed.message,
+      });
       if (parsed.kind === "unauthorized") {
         return jsonRpcError(id, -32001, "unauthorized", { code: "unauthorized" });
       }
@@ -296,10 +331,20 @@ async function handleSingleRequest(req: JsonRpcRequest, auth: McpAuth | null) {
 }
 
 export async function POST(request: Request) {
+  const url = new URL(request.url);
+  const authHeader = request.headers.get("authorization");
+  const authScheme = authHeader ? authHeader.split(" ")[0]?.toLowerCase() ?? null : null;
+  mcpLog("request_received", {
+    path: url.pathname,
+    authScheme,
+    hasAuthHeader: Boolean(authHeader),
+  });
+
   let body: unknown;
   try {
     body = await request.json();
   } catch {
+    mcpLog("parse_error");
     return Response.json(jsonRpcError(null, -32700, "Parse error"), { status: 400 });
   }
 
@@ -318,11 +363,21 @@ export async function POST(request: Request) {
         ? { kind: "oauth", token: sessionToken }
         : null;
 
+  mcpLog("auth_resolved", {
+    authKind: auth?.kind ?? null,
+    usedBearerHeader: Boolean(bearerToken),
+    usedBasicHeader: Boolean(basicCredentials),
+    usedSessionToken: !bearerToken && !basicCredentials && Boolean(sessionToken),
+  });
+
   if (Array.isArray(body)) {
+    mcpLog("batch_request", { size: body.length });
     if (body.length === 0 || body.length > MAX_BATCH_REQUESTS) {
+      mcpLog("batch_rejected", { size: body.length, max: MAX_BATCH_REQUESTS });
       return Response.json(jsonRpcError(null, -32600, "Invalid Request"), { status: 400 });
     }
     const responses = await Promise.all(body.map((entry) => handleSingleRequest(entry as JsonRpcRequest, auth)));
+    mcpLog("batch_completed", { size: body.length });
     return Response.json(responses, {
       headers: {
         "MCP-Protocol-Version": "2025-03-26",
@@ -330,7 +385,9 @@ export async function POST(request: Request) {
     });
   }
 
+  mcpLog("single_request");
   const response = await handleSingleRequest(body as JsonRpcRequest, auth);
+  mcpLog("single_completed");
   return Response.json(response, {
     headers: {
       "MCP-Protocol-Version": "2025-03-26",
