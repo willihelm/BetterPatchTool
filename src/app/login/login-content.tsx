@@ -11,7 +11,11 @@ import {
 } from "@/components/ui/card";
 import Image from "next/image";
 
-export function LoginContent() {
+type LoginContentProps = {
+  redirectTo?: string;
+};
+
+export function LoginContent({ redirectTo = "/dashboard" }: LoginContentProps) {
   const { signIn } = useAuthActions();
 
   return (
@@ -44,7 +48,7 @@ export function LoginContent() {
         <CardContent>
           <Button
             className="w-full"
-            onClick={() => void signIn("github", { redirectTo: "/dashboard" })}
+            onClick={() => void signIn("github", { redirectTo })}
           >
             <svg
               className="mr-2 h-4 w-4"

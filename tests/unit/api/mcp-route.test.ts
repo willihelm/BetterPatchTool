@@ -220,6 +220,40 @@ describe("POST /api/mcp", () => {
     });
   });
 
+  it("falls back to OAuth access token flow after bearer unauthorized", async () => {
+    mockState.mutationImpl
+      .mockRejectedValueOnce(new Error("MCP_ERROR:unauthorized:Not authenticated"))
+      .mockResolvedValueOnce([{ _id: "project-3" }]);
+
+    const request = makeRequest(
+      {
+        jsonrpc: "2.0",
+        id: 77,
+        method: "tools/call",
+        params: {
+          name: "list_projects",
+          arguments: {},
+        },
+      },
+      "Bearer oauth-access-token"
+    );
+
+    const response = await POST(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockState.instances[0].mutation).toHaveBeenCalledTimes(2);
+    const secondMutationArgs = mockState.instances[0].mutation.mock.calls[1][1] as {
+      accessToken: string;
+      name: string;
+    };
+    expect(secondMutationArgs).toMatchObject({
+      accessToken: "oauth-access-token",
+      name: "list_projects",
+    });
+    expect(payload.result.structuredContent).toEqual([{ _id: "project-3" }]);
+  });
+
   it("rejects invalid batch size", async () => {
     const oversizedBatch = Array.from({ length: 21 }, (_, idx) => ({
       jsonrpc: "2.0",

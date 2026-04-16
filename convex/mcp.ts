@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { logProjectActivity } from "./_helpers/projectActivity";
 import { constantTimeEqual, hashMcpClientSecret } from "./_helpers/mcpCredentials";
+import { sha256Base64Url } from "./_helpers/mcpOAuth";
 
 type McpErrorCode = "unauthorized" | "forbidden" | "invalid_arguments" | "not_found";
 
@@ -36,6 +37,21 @@ async function authenticateMcpClientCredentials(ctx: any, clientId: string, clie
   }
 
   throwMcpError("unauthorized", "Invalid client credentials");
+}
+
+async function authenticateMcpOAuthAccessToken(ctx: any, accessToken: string) {
+  const tokenHash = await sha256Base64Url(accessToken);
+  const tokenDoc = await ctx.db
+    .query("mcpOAuthAccessTokens")
+    .withIndex("by_tokenHash", (q: any) => q.eq("tokenHash", tokenHash))
+    .first();
+
+  if (!tokenDoc || tokenDoc.revokedAt || tokenDoc.expiresAt <= Date.now()) {
+    throwMcpError("unauthorized", "Invalid OAuth access token");
+  }
+
+  await ctx.db.patch(tokenDoc._id, { lastUsedAt: Date.now() });
+  return tokenDoc.userId;
 }
 
 async function getProjectAccessForUser(ctx: any, projectId: Id<"projects">, userId: string) {
@@ -230,6 +246,18 @@ export const executeToolWithClientCredentials = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await authenticateMcpClientCredentials(ctx, args.clientId, args.clientSecret);
+    return await executeToolForUser(ctx, userId, args.name, args.args);
+  },
+});
+
+export const executeToolWithOAuthAccessToken = mutation({
+  args: {
+    accessToken: v.string(),
+    name: v.string(),
+    args: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await authenticateMcpOAuthAccessToken(ctx, args.accessToken);
     return await executeToolForUser(ctx, userId, args.name, args.args);
   },
 });

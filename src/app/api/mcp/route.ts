@@ -272,21 +272,34 @@ async function handleSingleRequest(req: JsonRpcRequest, auth: McpAuth | null) {
     }
 
     try {
+      let result: unknown;
       if (auth.kind === "oauth") {
         convex.setAuth(auth.token);
+        try {
+          result = await convex.mutation(api.mcp.executeTool, {
+            name: toolName,
+            args: toolArgs ?? {},
+          });
+        } catch (error) {
+          const parsed = parseMcpError(error);
+          if (parsed.kind !== "unauthorized") {
+            throw error;
+          }
+          mcpLog("oauth_bearer_fallback", { id, toolName });
+          result = await convex.mutation(api.mcp.executeToolWithOAuthAccessToken, {
+            accessToken: auth.token,
+            name: toolName,
+            args: toolArgs ?? {},
+          });
+        }
+      } else {
+        result = await convex.mutation(api.mcp.executeToolWithClientCredentials, {
+          clientId: auth.clientId,
+          clientSecret: auth.clientSecret,
+          name: toolName,
+          args: toolArgs ?? {},
+        });
       }
-      const result =
-        auth.kind === "oauth"
-          ? await convex.mutation(api.mcp.executeTool, {
-              name: toolName,
-              args: toolArgs ?? {},
-            })
-          : await convex.mutation(api.mcp.executeToolWithClientCredentials, {
-              clientId: auth.clientId,
-              clientSecret: auth.clientSecret,
-              name: toolName,
-              args: toolArgs ?? {},
-            });
 
       mcpLog("tools_call_success", {
         id,

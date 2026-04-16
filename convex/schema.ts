@@ -72,6 +72,39 @@ export default defineSchema({
     .index("by_clientId", ["clientId"])
     .index("by_user_and_revokedAt", ["userId", "revokedAt"]),
 
+  // OAuth authorization codes used by remote MCP clients (e.g. Claude) with PKCE.
+  mcpOAuthAuthorizationCodes: defineTable({
+    codeHash: v.string(),
+    userId: v.string(),
+    clientId: v.string(),
+    redirectUri: v.string(),
+    codeChallenge: v.string(),
+    codeChallengeMethod: v.union(v.literal("S256"), v.literal("plain")),
+    scope: v.optional(v.string()),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    usedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_codeHash", ["codeHash"])
+    .index("by_clientId", ["clientId"])
+    .index("by_user", ["userId"]),
+
+  // OAuth bearer access tokens issued from authorization code exchange.
+  mcpOAuthAccessTokens: defineTable({
+    tokenHash: v.string(),
+    userId: v.string(),
+    clientId: v.string(),
+    scope: v.optional(v.string()),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    lastUsedAt: v.optional(v.number()),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_clientId", ["clientId"])
+    .index("by_user", ["userId"]),
+
   projectPresence: defineTable({
     projectId: v.id("projects"),
     userId: v.string(),
