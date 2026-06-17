@@ -70,14 +70,28 @@ export const list = query({
       })
     );
 
-    return [
+    const merged = [
       ...ownedProjects.map((project) => ({
         ...project,
         accessRole: "owner" as const,
         isOwned: true,
       })),
       ...sharedProjects.filter(Boolean),
-    ];
+    ] as any[];
+
+    // Sort projects by event date (project.date) descending. If date is missing or
+    // unparseable, fall back to creation time (_creationTime). Newer projects first.
+    function sortKey(p: any) {
+      if (p.date) {
+        const t = Date.parse(p.date);
+        if (!Number.isNaN(t)) return t;
+      }
+      return p._creationTime ?? 0;
+    }
+
+    merged.sort((a, b) => sortKey(b) - sortKey(a));
+
+    return merged;
   },
 });
 
