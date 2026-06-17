@@ -7,6 +7,7 @@ Open tasks based on PRD requirements. Ordered roughly by priority.
 - [ ] BUG: filter in matrix resets after changing a patch
 - [ ] BUG: outputs must be patchable to multiple physical outputs (1 to many)
 - [x] Add ability to edit project name and settings
+- [x] change settings of project from project overview
 - [ ] Remove mixer settings from project creation and navigate to mixer creation after project creation instead
 - [ ] Input change after enter
 - [ ] Input delete shall not enter edit mode on cell

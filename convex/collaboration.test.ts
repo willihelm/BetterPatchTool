@@ -75,6 +75,31 @@ describe("collaboration", () => {
     expect(updated?.source).toBe("Kick");
   });
 
+  it("lets pending email invitees open a shared project before the invite claim finishes", async () => {
+    const t = convexTest(schema, modules);
+    const owner = t.withIdentity({ subject: "owner-user", issuer: "convex" });
+    const editor = t.withIdentity({
+      subject: "editor-user",
+      issuer: "convex",
+      email: "editor@example.com",
+    });
+
+    const projectId = await owner.mutation(api.projects.create, { title: "Pending Invite Project" });
+    await owner.mutation(api.collaboration.inviteCollaborator, {
+      projectId,
+      email: "editor@example.com",
+      role: "editor",
+    });
+
+    const project = await editor.query(api.projects.get, { projectId });
+    expect(project?.title).toBe("Pending Invite Project");
+    expect(project?.accessRole).toBe("editor");
+
+    await editor.mutation(api.collaboration.claimPendingInvites, {});
+    const projects = await editor.query(api.projects.list, {});
+    expect(projects.map((sharedProject) => sharedProject._id)).toContain(projectId);
+  });
+
   it("resolves public share links as read-only access", async () => {
     const t = convexTest(schema, modules);
     const owner = t.withIdentity({ subject: "owner-user", issuer: "convex" });

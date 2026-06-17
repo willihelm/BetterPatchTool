@@ -112,15 +112,12 @@ export async function getProjectAccessForRequest(
         )
         .first();
       if (pendingInvite) {
-        await ctx.db.patch(pendingInvite._id, {
-          userId: currentUser.userId,
-          acceptedAt: pendingInvite.acceptedAt ?? Date.now(),
-        });
+        const acceptedAt = pendingInvite.acceptedAt ?? Date.now();
         return {
           role: pendingInvite.role,
           userId: currentUser.userId,
           project,
-          collaborator: { ...pendingInvite, userId: currentUser.userId, acceptedAt: pendingInvite.acceptedAt ?? Date.now() },
+          collaborator: { ...pendingInvite, userId: currentUser.userId, acceptedAt },
           shareLink: null,
         };
       }

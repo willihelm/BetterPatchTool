@@ -19,16 +19,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreVertical, Calendar, MapPin, Copy, Archive } from "lucide-react";
+import { Plus, MoreVertical, Calendar, MapPin, Copy, Archive, Settings } from "lucide-react";
 import { formatDistanceToNow } from "@/lib/date-utils";
 import type { Project } from "@/types/convex";
 import { AppHeader } from "@/components/shared/app-header";
+import { ProjectSettingsDialog } from "@/components/project/project-settings-dialog";
 
 export function DashboardContent() {
   const projects = useQuery(api.projects.list, {}) as Project[] | undefined;
   const archiveProject = useMutation(api.projects.archive);
   const duplicateProject = useMutation(api.projects.duplicate);
   const claimPendingInvites = useMutation(api.collaboration.claimPendingInvites);
+  const [projectSettingsOpen, setProjectSettingsOpen] = React.useState(false);
+  const [editingProject, setEditingProject] = React.useState<Project | null>(null);
 
   React.useEffect(() => {
     void claimPendingInvites({});
@@ -46,6 +49,11 @@ export function DashboardContent() {
       projectId: projectId as Id<"projects">,
       newTitle: `${title} (Copy)`,
     });
+  };
+
+  const handleOpenSettings = (project: Project) => {
+    setEditingProject(project);
+    setProjectSettingsOpen(true);
   };
 
   return (
@@ -101,6 +109,7 @@ export function DashboardContent() {
                       project={project}
                       onArchive={handleArchive}
                       onDuplicate={handleDuplicate}
+                      onOpenSettings={handleOpenSettings}
                     />
                   ))}
                 </div>
@@ -116,6 +125,7 @@ export function DashboardContent() {
                         project={project}
                         onArchive={handleArchive}
                         onDuplicate={handleDuplicate}
+                        onOpenSettings={handleOpenSettings}
                         shared
                       />
                     ))}
@@ -125,6 +135,15 @@ export function DashboardContent() {
             </div>
           )}
         </section>
+
+        {editingProject && (
+          <ProjectSettingsDialog
+            project={editingProject}
+            projectId={editingProject._id}
+            open={projectSettingsOpen}
+            onOpenChange={setProjectSettingsOpen}
+          />
+        )}
       </main>
     </div>
   );
@@ -134,11 +153,13 @@ function ProjectCard({
   project,
   onArchive,
   onDuplicate,
+  onOpenSettings,
   shared = false,
 }: {
   project: Project;
   onArchive: (projectId: string) => void;
   onDuplicate: (projectId: string, title: string) => void;
+  onOpenSettings: (project: Project) => void;
   shared?: boolean;
 }) {
   return (
@@ -160,6 +181,10 @@ function ProjectCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onOpenSettings(project)}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onDuplicate(project._id, project.title)}>
                   <Copy className="mr-2 h-4 w-4" />
                   Duplicate

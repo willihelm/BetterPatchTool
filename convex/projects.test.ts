@@ -120,6 +120,18 @@ describe("projects", () => {
     });
   });
 
+  describe("get", () => {
+    it("should return null for users without project access", async () => {
+      const t = convexTest(schema, modules);
+      const owner = t.withIdentity({ subject: "owner-user", issuer: "convex" });
+      const otherUser = t.withIdentity({ subject: "other-user", issuer: "convex" });
+
+      const projectId = await owner.mutation(api.projects.create, { title: "Private Project" });
+
+      await expect(otherUser.query(api.projects.get, { projectId })).resolves.toBeNull();
+    });
+  });
+
   describe("update", () => {
     it("should update project fields", async () => {
       const t = convexTest(schema, modules);

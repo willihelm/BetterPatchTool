@@ -87,7 +87,13 @@ export const get = query({
     accessToken: accessTokenValidator,
   },
   handler: async (ctx, args) => {
-    const access = await requireProjectAccess(ctx, args.projectId, args.accessToken);
+    const access = await requireProjectAccess(ctx, args.projectId, args.accessToken).catch((error) => {
+      if (error instanceof Error && error.message === "Not authorized") {
+        return null;
+      }
+      throw error;
+    });
+    if (!access) return null;
     return {
       ...access.project,
       accessRole: access.role,
