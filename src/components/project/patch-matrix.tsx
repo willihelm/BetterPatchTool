@@ -490,11 +490,17 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
     }
   }, [activeCell, channels, visiblePorts.length]);
 
-  // Memoize device IDs to avoid resetting selection on port data changes
+  // Memoize device IDs with a stable reference that only changes when device IDs actually change
   const deviceIds = useMemo(() => {
     if (!portGroups) return [];
     return portGroups.map((g) => g.device._id).sort();
   }, [portGroups]);
+
+  // Create a stable string key for deviceIds to use in effect dependencies
+  // This only changes when the actual device IDs change, not just the array reference
+  const deviceIdsKey = useMemo(() => {
+    return deviceIds.join(',');
+  }, [deviceIds]);
 
   // Initialize device selection when port groups load
   useEffect(() => {
@@ -502,7 +508,8 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
       setSelectedDeviceIds(new Set(deviceIds));
       setIsDeviceFilterInitialized(true);
     }
-  }, [deviceIds, isDeviceFilterInitialized]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviceIdsKey, isDeviceFilterInitialized]);
 
   // Handle device additions/removals (only when device list actually changes)
   useEffect(() => {
@@ -533,7 +540,8 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
         return next;
       });
     }
-  }, [deviceIds, isDeviceFilterInitialized]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviceIdsKey, isDeviceFilterInitialized]);
 
   // Reset active cell if it becomes invalid after filtering
   useEffect(() => {

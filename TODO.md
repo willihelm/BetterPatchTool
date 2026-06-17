@@ -4,7 +4,7 @@ Open tasks based on PRD requirements. Ordered roughly by priority.
 
 ## Feedback from Testing
 
-- [ ] BUG: filter in matrix resets after changing a patch
+- [x] BUG: filter in matrix resets after changing a patch
 - [ ] BUG: outputs must be patchable to multiple physical outputs (1 to many)
 - [x] Add ability to edit project name and settings
 - [x] change settings of project from project overview
