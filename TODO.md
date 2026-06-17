@@ -2,6 +2,20 @@
 
 Open tasks based on PRD requirements. Ordered roughly by priority.
 
+## Feedback from Testing
+
+- [ ] BUG: filter in matrix resets after changing a patch
+- [ ] BUG: outputs must be patchable to multiple physical outputs (1 to many)
+- [x] Add ability to edit project name and settings
+- [ ] Remove mixer settings from project creation and navigate to mixer creation after project creation instead
+- [ ] Input change after enter
+- [ ] Input delete shall not enter edit mode on cell
+- [ ] Input change with up/down arrow
+- [ ] Alt Enter: if ends with L add label with R instead as it is likely a stereo channel
+- [ ] CMD + Z/Strg + Z
+- [ ] Copy Cell text on CMD + C
+- [ ] Output '#' Column shall not reflect bus name. instead it should contain type and number of the output
+
 ## Authentication & Users
 
 - [x] Implement user authentication (Convex Auth)

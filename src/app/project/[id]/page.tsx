@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Download, Users, MoreVertical, Sun, Moon, Monitor, History } from "lucide-react";
+import { Download, Users, MoreVertical, Sun, Moon, Monitor, History, Settings } from "lucide-react";
 import { useTheme } from "next-themes";
 import { PatchList } from "@/components/project/patch-list";
 import { IOOverview } from "@/components/project/io-overview";
@@ -35,6 +35,7 @@ import { UndoRedoProvider, UndoRedoButtons } from "@/hooks/use-undo-redo";
 import { ProjectAccessProvider } from "@/components/project/project-access-context";
 import { CollaborationDialog } from "@/components/project/collaboration-dialog";
 import { ProjectActivitySheet } from "@/components/project/project-activity-sheet";
+import { ProjectSettingsDialog } from "@/components/project/project-settings-dialog";
 import type { Project, Mixer } from "@/types/convex";
 
 export default function ProjectPage() {
@@ -97,6 +98,7 @@ function ProjectPageContent({
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const [mixerSettingsOpen, setMixerSettingsOpen] = useState(false);
   const [settingsMixerId, setSettingsMixerId] = useState<Id<"mixers"> | null>(null);
+  const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
   const [collaborationOpen, setCollaborationOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("patch-list");
@@ -178,6 +180,12 @@ function ProjectPageContent({
                           <Download className="mr-2 h-4 w-4" />
                           Export PDF
                         </DropdownMenuItem>
+                        {!readOnly && (
+                          <DropdownMenuItem onClick={() => setProjectSettingsOpen(true)}>
+                            <Settings className="mr-2 h-4 w-4" />
+                            Project Settings
+                          </DropdownMenuItem>
+                        )}
                         {canManageCollaboration && (
                           <DropdownMenuItem onClick={() => setCollaborationOpen(true)}>
                             <Users className="mr-2 h-4 w-4" />
@@ -280,6 +288,15 @@ function ProjectPageContent({
             mixer={settingsMixer}
             open={mixerSettingsOpen}
             onOpenChange={setMixerSettingsOpen}
+          />
+        )}
+
+        {!readOnly && (
+          <ProjectSettingsDialog
+            project={project}
+            projectId={projectId}
+            open={projectSettingsOpen}
+            onOpenChange={setProjectSettingsOpen}
           />
         )}
 
