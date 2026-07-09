@@ -34,7 +34,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
   const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number } | null>(null);
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
-  const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<string>>(new Set());
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<Id<"ioDevices">>>(new Set());
   const [isDeviceFilterInitialized, setIsDeviceFilterInitialized] = useState(false);
   const [diagonalAnchor, setDiagonalAnchor] = useState<{
     row: number;
@@ -524,7 +524,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
           return prev; // No change needed
         }
 
-        const next = new Set<string>();
+        const next = new Set<Id<"ioDevices">>();
         // Keep existing selections that still exist
         prev.forEach((id) => {
           if (currentDeviceIds.has(id)) {
@@ -636,7 +636,7 @@ export function PatchMatrix({ projectId }: PatchMatrixProps) {
   }, [deviceSpans]);
 
   // Device selection helper functions
-  const toggleDevice = useCallback((deviceId: string) => {
+  const toggleDevice = useCallback((deviceId: Id<"ioDevices">) => {
     setSelectedDeviceIds((prev) => {
       const next = new Set(prev);
       if (next.has(deviceId)) {

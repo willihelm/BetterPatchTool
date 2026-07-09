@@ -180,13 +180,13 @@ export const getAllPatchingData = query({
 
     // Build grouped port data for input and output dropdowns
     const inputPortGroups: Array<{
-      device: { _id: string; name: string; shortName: string; color: string };
-      ports: Array<{ _id: string; label: string; portNumber: number; isUsed: boolean; subType?: string }>;
+      device: { _id: Id<"ioDevices">; name: string; shortName: string; color: string };
+      ports: Array<{ _id: Id<"ioPorts">; label: string; portNumber: number; isUsed: boolean; subType?: string }>;
     }> = [];
 
     const outputPortGroups: Array<{
-      device: { _id: string; name: string; shortName: string; color: string };
-      ports: Array<{ _id: string; label: string; portNumber: number; isUsed: boolean; subType?: string }>;
+      device: { _id: Id<"ioDevices">; name: string; shortName: string; color: string };
+      ports: Array<{ _id: Id<"ioPorts">; label: string; portNumber: number; isUsed: boolean; subType?: string }>;
     }> = [];
 
     ioDevices.forEach((device, index) => {
@@ -887,8 +887,8 @@ export const batchPatchChannels = mutation({
   args: {
     channelType: v.union(v.literal("input"), v.literal("output")),
     patches: v.array(v.object({
-      channelId: v.string(),
-      ioPortId: v.union(v.string(), v.null()),
+      channelId: v.union(v.id("inputChannels"), v.id("outputChannels")),
+      ioPortId: v.union(v.id("ioPorts"), v.null()),
       stereoSide: v.optional(v.union(v.literal("left"), v.literal("right"), v.null())),
     })),
   },
@@ -906,6 +906,7 @@ export const batchPatchChannels = mutation({
     for (const patch of args.patches) {
       const portField = patch.stereoSide === "right" ? "ioPortIdRight" : "ioPortId";
 
+      // v.union accepts IDs from either table; ensure the ID matches the declared channelType.
       const channelId =
         args.channelType === "input"
           ? ctx.db.normalizeId("inputChannels", patch.channelId)
@@ -922,15 +923,13 @@ export const batchPatchChannels = mutation({
         continue;
       }
 
-      const portId = ctx.db.normalizeId("ioPorts", patch.ioPortId);
-      if (!portId) continue;
-      const port = await ctx.db.get(portId);
+      const port = await ctx.db.get(patch.ioPortId);
       if (!port || port.type !== args.channelType) continue;
 
       const device = await ctx.db.get(port.ioDeviceId);
       if (!device || device.projectId !== channel.projectId) continue;
 
-      await ctx.db.patch(channelId, { [portField]: portId });
+      await ctx.db.patch(channelId, { [portField]: patch.ioPortId });
       patched++;
     }
 

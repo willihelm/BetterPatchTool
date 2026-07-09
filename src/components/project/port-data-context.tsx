@@ -52,13 +52,13 @@ export function getPortUsageDisplayName(usage: PortUsage | PortUsageEntry | unde
 
 export interface PortGroup {
   device: {
-    _id: string;
+    _id: Id<"ioDevices">;
     name: string;
     shortName: string;
     color: string;
   };
   ports: Array<{
-    _id: string;
+    _id: Id<"ioPorts">;
     label: string;
     portNumber: number;
     isUsed: boolean;
