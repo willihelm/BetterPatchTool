@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockState = vi.hoisted(() => {
   return {
     sessionToken: null as string | null,
-    mutationImpl: vi.fn(async (fnRef: unknown, args: unknown) => ({ ok: true })),
+    mutationImpl: vi.fn(async (fnRef: unknown, args: unknown): Promise<unknown> => ({ ok: true })),
     instances: [] as Array<{
       setAuth: ReturnType<typeof vi.fn>;
       mutation: ReturnType<typeof vi.fn>;

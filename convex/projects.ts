@@ -238,7 +238,7 @@ export const duplicate = mutation({
     newTitle: v.string(),
   },
   handler: async (ctx, args) => {
-    const access = await requireProjectAccess(ctx, args.projectId);
+    const access = await requireProjectRole(ctx, args.projectId, "editor");
     const currentUser = await requireAuthenticatedUser(ctx);
     const original = access.project;
 

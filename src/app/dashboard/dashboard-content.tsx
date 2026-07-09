@@ -139,7 +139,7 @@ export function DashboardContent() {
         {editingProject && (
           <ProjectSettingsDialog
             project={editingProject}
-            projectId={editingProject._id}
+            projectId={editingProject._id as Id<"projects">}
             open={projectSettingsOpen}
             onOpenChange={setProjectSettingsOpen}
           />
