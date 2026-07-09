@@ -1,14 +1,36 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import {
   accessTokenValidator,
   getProjectAccessForRequest,
-  requireProjectAccess,
   requireProjectRole,
   shouldGracefullyHandleTokenAccessLoss,
 } from "./_helpers/projectAccess";
 import { logProjectActivity } from "./_helpers/projectActivity";
+
+// Validates that a port exists, has the expected type, and belongs to the given project.
+async function requirePortInProject(
+  ctx: QueryCtx,
+  portId: Id<"ioPorts">,
+  projectId: Id<"projects">,
+  expectedType: "input" | "output"
+) {
+  const port = await ctx.db.get(portId);
+  if (!port) throw new Error("Port not found");
+  if (port.type !== expectedType) {
+    throw new Error(
+      expectedType === "input"
+        ? "Cannot assign output port to input channel"
+        : "Cannot assign input port to output channel"
+    );
+  }
+  const device = await ctx.db.get(port.ioDeviceId);
+  if (!device || device.projectId !== projectId) {
+    throw new Error("Port does not belong to this project");
+  }
+  return port;
+}
 
 // Combined query that returns all patching data in a single call
 // This reduces the number of DB queries and avoids fetching the same data multiple times
@@ -450,17 +472,13 @@ export const patchInputChannel = mutation({
     if (!channel) throw new Error("Channel not found");
     const access = await requireProjectRole(ctx, channel.projectId, "editor");
 
-    // Validate port type if assigning (should be input port)
+    // Validate port type and project membership if assigning (should be input port)
     if (args.ioPortId) {
-      const port = await ctx.db.get(args.ioPortId);
-      if (!port) throw new Error("Port not found");
-      if (port.type !== "input") throw new Error("Cannot assign output port to input channel");
+      await requirePortInProject(ctx, args.ioPortId, channel.projectId, "input");
     }
 
     if (args.ioPortIdRight) {
-      const portRight = await ctx.db.get(args.ioPortIdRight);
-      if (!portRight) throw new Error("Right port not found");
-      if (portRight.type !== "input") throw new Error("Cannot assign output port to input channel");
+      await requirePortInProject(ctx, args.ioPortIdRight, channel.projectId, "input");
     }
 
     const updates: { ioPortId?: Id<"ioPorts"> | undefined; ioPortIdRight?: Id<"ioPorts"> | undefined } = {};
@@ -504,17 +522,13 @@ export const patchOutputChannel = mutation({
     if (!channel) throw new Error("Channel not found");
     const access = await requireProjectRole(ctx, channel.projectId, "editor");
 
-    // Validate port type if assigning (should be output port)
+    // Validate port type and project membership if assigning (should be output port)
     if (args.ioPortId) {
-      const port = await ctx.db.get(args.ioPortId);
-      if (!port) throw new Error("Port not found");
-      if (port.type !== "output") throw new Error("Cannot assign input port to output channel");
+      await requirePortInProject(ctx, args.ioPortId, channel.projectId, "output");
     }
 
     if (args.ioPortIdRight) {
-      const portRight = await ctx.db.get(args.ioPortIdRight);
-      if (!portRight) throw new Error("Right port not found");
-      if (portRight.type !== "output") throw new Error("Cannot assign input port to output channel");
+      await requirePortInProject(ctx, args.ioPortIdRight, channel.projectId, "output");
     }
 
     // Check output port exclusivity across all mixers
@@ -879,42 +893,48 @@ export const batchPatchChannels = mutation({
     })),
   },
   handler: async (ctx, args) => {
+    const authorizedProjects = new Set<Id<"projects">>();
+    const requireEditor = async (projectId: Id<"projects">) => {
+      if (!authorizedProjects.has(projectId)) {
+        await requireProjectRole(ctx, projectId, "editor");
+        authorizedProjects.add(projectId);
+      }
+    };
+
+    let patched = 0;
+
     for (const patch of args.patches) {
       const portField = patch.stereoSide === "right" ? "ioPortIdRight" : "ioPortId";
-      const expectedPortType = args.channelType === "input" ? "input" : "output";
 
-      if (args.channelType === "input") {
-        const channelId = patch.channelId as Id<"inputChannels">;
-        const channel = await ctx.db.get(channelId);
-        if (!channel) continue;
+      const channelId =
+        args.channelType === "input"
+          ? ctx.db.normalizeId("inputChannels", patch.channelId)
+          : ctx.db.normalizeId("outputChannels", patch.channelId);
+      if (!channelId) continue;
 
-        if (patch.ioPortId === null) {
-          await ctx.db.patch(channelId, { [portField]: undefined });
-        } else {
-          const portId = patch.ioPortId as Id<"ioPorts">;
-          const port = await ctx.db.get(portId);
-          if (!port || port.type !== expectedPortType) continue;
+      const channel = await ctx.db.get(channelId);
+      if (!channel) continue;
+      await requireEditor(channel.projectId);
 
-          await ctx.db.patch(channelId, { [portField]: portId });
-        }
-      } else {
-        const channelId = patch.channelId as Id<"outputChannels">;
-        const channel = await ctx.db.get(channelId);
-        if (!channel) continue;
-
-        if (patch.ioPortId === null) {
-          await ctx.db.patch(channelId, { [portField]: undefined });
-        } else {
-          const portId = patch.ioPortId as Id<"ioPorts">;
-          const port = await ctx.db.get(portId);
-          if (!port || port.type !== expectedPortType) continue;
-
-          await ctx.db.patch(channelId, { [portField]: portId });
-        }
+      if (patch.ioPortId === null) {
+        await ctx.db.patch(channelId, { [portField]: undefined });
+        patched++;
+        continue;
       }
+
+      const portId = ctx.db.normalizeId("ioPorts", patch.ioPortId);
+      if (!portId) continue;
+      const port = await ctx.db.get(portId);
+      if (!port || port.type !== args.channelType) continue;
+
+      const device = await ctx.db.get(port.ioDeviceId);
+      if (!device || device.projectId !== channel.projectId) continue;
+
+      await ctx.db.patch(channelId, { [portField]: portId });
+      patched++;
     }
 
-    return { patched: args.patches.length };
+    return { patched };
   },
 });
 
@@ -925,26 +945,36 @@ export const clearPatches = mutation({
     outputChannelIds: v.optional(v.array(v.id("outputChannels"))),
   },
   handler: async (ctx, args) => {
+    const authorizedProjects = new Set<Id<"projects">>();
+    const requireEditor = async (projectId: Id<"projects">) => {
+      if (!authorizedProjects.has(projectId)) {
+        await requireProjectRole(ctx, projectId, "editor");
+        authorizedProjects.add(projectId);
+      }
+    };
+
     let cleared = 0;
 
-    if (args.inputChannelIds) {
-      for (const channelId of args.inputChannelIds) {
-        await ctx.db.patch(channelId, {
-          ioPortId: undefined,
-          ioPortIdRight: undefined,
-        });
-        cleared++;
-      }
+    for (const channelId of args.inputChannelIds ?? []) {
+      const channel = await ctx.db.get(channelId);
+      if (!channel) continue;
+      await requireEditor(channel.projectId);
+      await ctx.db.patch(channelId, {
+        ioPortId: undefined,
+        ioPortIdRight: undefined,
+      });
+      cleared++;
     }
 
-    if (args.outputChannelIds) {
-      for (const channelId of args.outputChannelIds) {
-        await ctx.db.patch(channelId, {
-          ioPortId: undefined,
-          ioPortIdRight: undefined,
-        });
-        cleared++;
-      }
+    for (const channelId of args.outputChannelIds ?? []) {
+      const channel = await ctx.db.get(channelId);
+      if (!channel) continue;
+      await requireEditor(channel.projectId);
+      await ctx.db.patch(channelId, {
+        ioPortId: undefined,
+        ioPortIdRight: undefined,
+      });
+      cleared++;
     }
 
     return { cleared };
