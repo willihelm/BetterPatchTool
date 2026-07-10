@@ -10,12 +10,14 @@
 
 import type * as _helpers_mcpCredentials from "../_helpers/mcpCredentials.js";
 import type * as _helpers_mcpOAuth from "../_helpers/mcpOAuth.js";
+import type * as _helpers_mcpToolSchemas from "../_helpers/mcpToolSchemas.js";
 import type * as _helpers_portGeneration from "../_helpers/portGeneration.js";
 import type * as _helpers_projectAccess from "../_helpers/projectAccess.js";
 import type * as _helpers_projectActivity from "../_helpers/projectActivity.js";
 import type * as auth from "../auth.js";
 import type * as blockPresets from "../blockPresets.js";
 import type * as collaboration from "../collaboration.js";
+import type * as crons from "../crons.js";
 import type * as groups from "../groups.js";
 import type * as http from "../http.js";
 import type * as inputChannels from "../inputChannels.js";
@@ -25,6 +27,7 @@ import type * as ioDevices from "../ioDevices.js";
 import type * as mcp from "../mcp.js";
 import type * as mcpCredentials from "../mcpCredentials.js";
 import type * as mcpOAuth from "../mcpOAuth.js";
+import type * as mcpOAuthClients from "../mcpOAuthClients.js";
 import type * as migrations from "../migrations.js";
 import type * as mixers from "../mixers.js";
 import type * as outputChannels from "../outputChannels.js";
@@ -42,12 +45,14 @@ import type {
 declare const fullApi: ApiFromModules<{
   "_helpers/mcpCredentials": typeof _helpers_mcpCredentials;
   "_helpers/mcpOAuth": typeof _helpers_mcpOAuth;
+  "_helpers/mcpToolSchemas": typeof _helpers_mcpToolSchemas;
   "_helpers/portGeneration": typeof _helpers_portGeneration;
   "_helpers/projectAccess": typeof _helpers_projectAccess;
   "_helpers/projectActivity": typeof _helpers_projectActivity;
   auth: typeof auth;
   blockPresets: typeof blockPresets;
   collaboration: typeof collaboration;
+  crons: typeof crons;
   groups: typeof groups;
   http: typeof http;
   inputChannels: typeof inputChannels;
@@ -57,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   mcp: typeof mcp;
   mcpCredentials: typeof mcpCredentials;
   mcpOAuth: typeof mcpOAuth;
+  mcpOAuthClients: typeof mcpOAuthClients;
   migrations: typeof migrations;
   mixers: typeof mixers;
   outputChannels: typeof outputChannels;

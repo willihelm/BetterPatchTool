@@ -3,19 +3,18 @@
 import * as React from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import { Id } from "../../../../convex/_generated/dataModel";
 import { AppHeader } from "@/components/shared/app-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import Link from "next/link";
 
-type CredentialRow = {
-  _id: Id<"mcpCredentials">;
-  name: string;
+type Grant = {
   clientId: string;
-  createdAt: number;
+  clientName?: string;
+  clientUri?: string;
+  connectedAt: number;
   lastUsedAt?: number;
+  scope?: string;
 };
 
 function formatDate(value?: number) {
@@ -24,47 +23,28 @@ function formatDate(value?: number) {
 }
 
 export function McpAccessContent() {
-  const credentials = useQuery(api.mcpCredentials.list, {}) as CredentialRow[] | undefined;
-  const createCredential = useMutation(api.mcpCredentials.create);
-  const deleteCredential = useMutation(api.mcpCredentials.remove);
+  const grants = useQuery(api.mcpOAuth.listGrants, {}) as Grant[] | undefined;
+  const revokeGrant = useMutation(api.mcpOAuth.revokeClientGrant);
 
-  const [name, setName] = React.useState("");
-  const [createdClientId, setCreatedClientId] = React.useState<string | null>(null);
-  const [createdClientSecret, setCreatedClientSecret] = React.useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [infoMessage, setInfoMessage] = React.useState<string | null>(null);
+  const [revokingClientId, setRevokingClientId] = React.useState<string | null>(null);
 
-  const onCreate = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setIsSubmitting(true);
-    setErrorMessage(null);
-    setInfoMessage(null);
-    try {
-      const result = await createCredential({ name: trimmed });
-      setCreatedClientId(result.clientId);
-      setCreatedClientSecret(result.clientSecret);
-      setName("");
-      setInfoMessage("Credential created. Copy the secret now - it will not be shown again.");
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to create credential");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const onDelete = async (credentialId: Id<"mcpCredentials">) => {
-    if (!window.confirm("Delete this credential? This cannot be undone.")) {
+  const onRevoke = async (grant: Grant) => {
+    const label = grant.clientName ?? grant.clientId;
+    if (!window.confirm(`Revoke access for "${label}"? The app will have to be re-authorized to connect again.`)) {
       return;
     }
     setErrorMessage(null);
     setInfoMessage(null);
+    setRevokingClientId(grant.clientId);
     try {
-      await deleteCredential({ credentialId });
-      setInfoMessage("Credential deleted.");
+      await revokeGrant({ clientId: grant.clientId });
+      setInfoMessage(`Access for "${label}" has been revoked.`);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to delete credential");
+      setErrorMessage(error instanceof Error ? error.message : "Failed to revoke access");
+    } finally {
+      setRevokingClientId(null);
     }
   };
 
@@ -81,73 +61,44 @@ export function McpAccessContent() {
       <main className="container mx-auto space-y-6 px-4 py-8">
         <Card>
           <CardHeader>
-            <CardTitle>MCP Client Credentials</CardTitle>
+            <CardTitle>Connected apps</CardTitle>
             <CardDescription>
-              Create `client_id` and `client_secret` for MCP clients (e.g. Claude Code). The secret is shown only once.
+              MCP applications (e.g. Claude) that you have authorized to access your account. Revoking an app
+              invalidates all of its tokens immediately.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
             {infoMessage && <p className="text-sm text-muted-foreground">{infoMessage}</p>}
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                placeholder="Label (e.g. Claude Code)"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-              <Button onClick={() => void onCreate()} disabled={isSubmitting || !name.trim()}>
-                Create credentials
-              </Button>
-            </div>
-
-            {createdClientId && createdClientSecret && (
-              <div className="space-y-2 rounded-md border bg-muted/30 p-3">
-                <p className="text-sm font-medium">
-                  Copy now - the secret will not be shown again:
-                </p>
-                <div>
-                  <p className="text-xs text-muted-foreground">Client ID</p>
-                  <pre className="overflow-x-auto text-xs">{createdClientId}</pre>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Client Secret</p>
-                  <pre className="overflow-x-auto text-xs">{createdClientSecret}</pre>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Existing credentials</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {credentials === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading credentials...</p>
-            ) : credentials.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No credentials yet.</p>
+            {grants === undefined ? (
+              <p className="text-sm text-muted-foreground">Loading connected apps...</p>
+            ) : grants.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No connected apps yet. Add this server as a custom connector in Claude to get started.
+              </p>
             ) : (
               <div className="space-y-3">
-                {credentials.map((credential) => (
-                  <div key={credential._id} className="rounded-md border p-3">
+                {grants.map((grant) => (
+                  <div key={grant.clientId} className="rounded-md border p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="space-y-1">
-                        <p className="text-sm font-medium">{credential.name}</p>
-                        <p className="text-xs text-muted-foreground">Client ID: {credential.clientId}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Created: {formatDate(credential.createdAt)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Last used: {formatDate(credential.lastUsedAt)}
-                        </p>
+                        <p className="text-sm font-medium">{grant.clientName ?? "Unnamed application"}</p>
+                        {grant.clientUri && (
+                          <p className="text-xs text-muted-foreground">URL: {grant.clientUri}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">Connected: {formatDate(grant.connectedAt)}</p>
+                        <p className="text-xs text-muted-foreground">Last used: {formatDate(grant.lastUsedAt)}</p>
+                        {grant.scope && (
+                          <p className="text-xs text-muted-foreground">Scope: {grant.scope}</p>
+                        )}
                       </div>
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => void onDelete(credential._id)}
+                        onClick={() => void onRevoke(grant)}
+                        disabled={revokingClientId === grant.clientId}
                       >
-                        Delete
+                        Revoke
                       </Button>
                     </div>
                   </div>
@@ -159,25 +110,17 @@ export function McpAccessContent() {
 
         <Card>
           <CardHeader>
-            <CardTitle>MCP usage (Client ID/Secret)</CardTitle>
-            <CardDescription>
-              You can use MCP either with an OAuth session/bearer token or with the client credentials created here.
-            </CardDescription>
+            <CardTitle>How to connect</CardTitle>
+            <CardDescription>Connect Claude (or any MCP client) via OAuth - no keys to copy.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <p>
-              <span className="font-medium">Endpoint:</span> <code>POST /api/mcp</code>
-            </p>
-            <p>
-              <span className="font-medium">HTTP Auth:</span>{" "}
-              <code>Authorization: Basic base64(client_id:client_secret)</code>
-            </p>
-            <pre className="overflow-x-auto rounded-md border bg-muted/30 p-2 text-xs">
-              <code>{`curl -X POST http://localhost:3000/api/mcp \\
-  -H "Content-Type: application/json" \\
-  -u "<client_id>:<client_secret>" \\
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'`}</code>
-            </pre>
+          <CardContent className="space-y-2 text-sm">
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>In Claude, open Settings → Connectors → Add custom connector.</li>
+              <li>
+                Paste this server&apos;s MCP URL: <code>{`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/mcp`}</code>
+              </li>
+              <li>Sign in with GitHub and approve the consent screen.</li>
+            </ol>
           </CardContent>
         </Card>
       </main>

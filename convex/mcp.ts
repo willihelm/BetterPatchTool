@@ -1,42 +1,20 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { z } from "zod";
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { logProjectActivity } from "./_helpers/projectActivity";
-import { constantTimeEqual, hashMcpClientSecret } from "./_helpers/mcpCredentials";
-import { sha256Base64Url } from "./_helpers/mcpOAuth";
+import { isAllowedTokenAudience, sha256Base64Url } from "./_helpers/mcpOAuth";
+import {
+  updateInputChannelShape,
+  updateOutputChannelShape,
+  updateProjectMetaShape,
+} from "./_helpers/mcpToolSchemas";
 
 type McpErrorCode = "unauthorized" | "forbidden" | "invalid_arguments" | "not_found";
 
+// ConvexError so the MCP_ERROR code survives prod redaction and reaches the transport route.
 function throwMcpError(code: McpErrorCode, message: string): never {
-  throw new Error(`MCP_ERROR:${code}:${message}`);
-}
-
-async function requireMcpUserId(ctx: MutationCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) {
-    throwMcpError("unauthorized", "Not authenticated");
-  }
-  return userId;
-}
-
-async function authenticateMcpClientCredentials(ctx: MutationCtx, clientId: string, clientSecret: string) {
-  const secretHash = await hashMcpClientSecret(clientId, clientSecret);
-  const candidates = await ctx.db
-    .query("mcpCredentials")
-    .withIndex("by_clientId", (q) => q.eq("clientId", clientId))
-    .collect();
-
-  for (const candidate of candidates) {
-    if (candidate.revokedAt) continue;
-    if (constantTimeEqual(candidate.clientSecretHash, secretHash)) {
-      await ctx.db.patch(candidate._id, { lastUsedAt: Date.now() });
-      return candidate.userId;
-    }
-  }
-
-  throwMcpError("unauthorized", "Invalid client credentials");
+  throw new ConvexError(`MCP_ERROR:${code}:${message}`);
 }
 
 async function authenticateMcpOAuthAccessToken(ctx: MutationCtx, accessToken: string) {
@@ -47,6 +25,12 @@ async function authenticateMcpOAuthAccessToken(ctx: MutationCtx, accessToken: st
     .first();
 
   if (!tokenDoc || tokenDoc.revokedAt || tokenDoc.expiresAt <= Date.now()) {
+    throwMcpError("unauthorized", "Invalid OAuth access token");
+  }
+
+  // RFC 8707 audience binding; tokens without a resource predate audience
+  // enforcement and expire within an hour of the migration deploy.
+  if (!isAllowedTokenAudience(tokenDoc.resource)) {
     throwMcpError("unauthorized", "Invalid OAuth access token");
   }
 
@@ -96,45 +80,9 @@ async function requireProjectRoleForUser(
   return access;
 }
 
-const updateProjectMetaSchema = z.object({
-  projectId: z.string().min(1),
-  title: z.string().min(1).max(160).optional(),
-  date: z.string().min(1).max(64).optional(),
-  venue: z.string().min(1).max(160).optional(),
-});
-
-const updateInputChannelSchema = z.object({
-  channelId: z.string().min(1),
-  source: z.string().optional(),
-  sourceRight: z.string().optional(),
-  uhf: z.string().optional(),
-  micInputDev: z.string().optional(),
-  patched: z.boolean().optional(),
-  location: z.string().optional(),
-  cable: z.string().optional(),
-  stand: z.string().optional(),
-  notes: z.string().optional(),
-  ioPortId: z.string().optional(),
-  ioPortIdRight: z.string().optional(),
-  isStereo: z.boolean().optional(),
-  groupId: z.string().optional(),
-  channelNumber: z.number().int().positive().optional(),
-});
-
-const updateOutputChannelSchema = z.object({
-  channelId: z.string().min(1),
-  busType: z.enum(["group", "aux", "fx", "matrix", "master", "cue"]).optional(),
-  busName: z.string().optional(),
-  destination: z.string().optional(),
-  destinationRight: z.string().optional(),
-  ampProcessor: z.string().optional(),
-  location: z.string().optional(),
-  cable: z.string().optional(),
-  notes: z.string().optional(),
-  ioPortId: z.string().optional(),
-  ioPortIdRight: z.string().optional(),
-  isStereo: z.boolean().optional(),
-});
+const updateProjectMetaSchema = z.object(updateProjectMetaShape);
+const updateInputChannelSchema = z.object(updateInputChannelShape);
+const updateOutputChannelSchema = z.object(updateOutputChannelShape);
 
 function ensureHasUpdateFields(
   updates: Record<string, unknown>,
@@ -225,30 +173,6 @@ async function listIODevicesWithPorts(ctx: QueryCtx, projectId: Id<"projects">) 
     };
   });
 }
-
-export const executeTool = mutation({
-  args: {
-    name: v.string(),
-    args: v.optional(v.record(v.string(), v.any())),
-  },
-  handler: async (ctx, args) => {
-    const userId = await requireMcpUserId(ctx);
-    return await executeToolForUser(ctx, userId, args.name, args.args);
-  },
-});
-
-export const executeToolWithClientCredentials = mutation({
-  args: {
-    clientId: v.string(),
-    clientSecret: v.string(),
-    name: v.string(),
-    args: v.optional(v.record(v.string(), v.any())),
-  },
-  handler: async (ctx, args) => {
-    const userId = await authenticateMcpClientCredentials(ctx, args.clientId, args.clientSecret);
-    return await executeToolForUser(ctx, userId, args.name, args.args);
-  },
-});
 
 export const executeToolWithOAuthAccessToken = mutation({
   args: {

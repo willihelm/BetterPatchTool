@@ -16,6 +16,16 @@ export function createOpaqueToken(prefix: string) {
   return `${prefix}_${toBase64Url(bytes)}`;
 }
 
+// RFC 8707 audience check for issued tokens. Tokens minted before audience
+// binding was introduced carry no resource and stay valid until their natural
+// (<= 1 h) expiry. When MCP_RESOURCE_URL is unset (local dev), enforcement is off.
+export function isAllowedTokenAudience(resource: string | undefined) {
+  if (resource === undefined) return true;
+  const expected = process.env.MCP_RESOURCE_URL;
+  if (!expected) return true;
+  return resource === expected;
+}
+
 export function isSupportedRedirectUri(redirectUri: string) {
   try {
     const url = new URL(redirectUri);

@@ -17,11 +17,13 @@ export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   }
 
   // OAuth metadata and token endpoints are intentionally public for MCP OAuth.
+  // The protected-resource check covers the RFC 9728 path-insertion form
+  // (/.well-known/oauth-protected-resource/api/mcp) as well.
   if (
     pathname === "/token" ||
     pathname === "/register" ||
     pathname === "/.well-known/oauth-authorization-server" ||
-    pathname === "/.well-known/oauth-protected-resource"
+    pathname.startsWith("/.well-known/oauth-protected-resource")
   ) {
     return;
   }

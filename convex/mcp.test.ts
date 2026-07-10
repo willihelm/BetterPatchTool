@@ -6,11 +6,52 @@ import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
 
-describe("mcp executeTool", () => {
-  it("rejects unauthenticated requests with unauthorized", async () => {
+const CLAUDE_CALLBACK = "https://claude.ai/api/mcp/auth_callback";
+
+async function sha256Base64Url(input: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+// Runs the full DCR -> authorize -> exchange flow so tests exercise the same
+// OAuth access-token path the transport route uses in production.
+async function accessTokenFor(
+  t: ReturnType<typeof convexTest>,
+  asUser: ReturnType<ReturnType<typeof convexTest>["withIdentity"]>
+) {
+  const client = await t.mutation(api.mcpOAuthClients.register, {
+    clientName: "Claude",
+    redirectUris: [CLAUDE_CALLBACK],
+  });
+
+  const verifier = `verifier-${Math.random().toString(36).slice(2)}`;
+  const createdCode = await asUser.mutation(api.mcpOAuth.createAuthorizationCode, {
+    clientId: client.clientId,
+    redirectUri: CLAUDE_CALLBACK,
+    codeChallenge: await sha256Base64Url(verifier),
+    codeChallengeMethod: "S256",
+  });
+
+  const exchanged = await t.mutation(api.mcpOAuth.exchangeAuthorizationCode, {
+    grantType: "authorization_code",
+    clientId: client.clientId,
+    code: createdCode.code,
+    redirectUri: CLAUDE_CALLBACK,
+    codeVerifier: verifier,
+  });
+
+  return exchanged.accessToken;
+}
+
+describe("mcp executeToolWithOAuthAccessToken", () => {
+  it("rejects invalid access tokens with unauthorized", async () => {
     const t = convexTest(schema, modules);
     await expect(
-      t.mutation(api.mcp.executeTool, {
+      t.mutation(api.mcp.executeToolWithOAuthAccessToken, {
+        accessToken: "bpt_at_not-a-real-token",
         name: "list_projects",
         args: {},
       })
@@ -25,20 +66,25 @@ describe("mcp executeTool", () => {
     const projectId = await owner.mutation(api.projects.create, { title: "MCP Project" });
     await owner.mutation(api.projects.addCollaborator, { projectId, collaboratorId: "editor-user" });
 
-    const projects = await editor.mutation(api.mcp.executeTool, {
+    const editorToken = await accessTokenFor(t, editor);
+
+    const projects = await t.mutation(api.mcp.executeToolWithOAuthAccessToken, {
+      accessToken: editorToken,
       name: "list_projects",
       args: {},
     });
     expect((projects as any[]).length).toBe(1);
 
-    const channelsBefore = await editor.mutation(api.mcp.executeTool, {
+    const channelsBefore = await t.mutation(api.mcp.executeToolWithOAuthAccessToken, {
+      accessToken: editorToken,
       name: "list_input_channels",
       args: { projectId },
     });
     expect(channelsBefore as any[], "Expected at least one input channel for update test").not.toHaveLength(0);
     const firstChannel = (channelsBefore as any[])[0];
 
-    await editor.mutation(api.mcp.executeTool, {
+    await t.mutation(api.mcp.executeToolWithOAuthAccessToken, {
+      accessToken: editorToken,
       name: "update_input_channel",
       args: {
         channelId: firstChannel._id,
@@ -46,30 +92,12 @@ describe("mcp executeTool", () => {
       },
     });
 
-    const channelsAfter = await editor.mutation(api.mcp.executeTool, {
+    const channelsAfter = await t.mutation(api.mcp.executeToolWithOAuthAccessToken, {
+      accessToken: editorToken,
       name: "list_input_channels",
       args: { projectId },
     });
     expect((channelsAfter as any[])[0].source).toBe("Kick In");
-  });
-
-  it("allows MCP calls with client credentials", async () => {
-    const t = convexTest(schema, modules);
-    const owner = t.withIdentity({ subject: "owner-user", issuer: "convex" });
-    const editor = t.withIdentity({ subject: "editor-user", issuer: "convex" });
-
-    const projectId = await owner.mutation(api.projects.create, { title: "MCP Credentials Project" });
-    await owner.mutation(api.projects.addCollaborator, { projectId, collaboratorId: "editor-user" });
-
-    const created = await editor.mutation(api.mcpCredentials.create, { name: "Claude Code" });
-    const projects = await t.mutation(api.mcp.executeToolWithClientCredentials, {
-      clientId: created.clientId,
-      clientSecret: created.clientSecret,
-      name: "list_projects",
-      args: {},
-    });
-
-    expect((projects as any[]).length).toBe(1);
   });
 
   it("blocks write tools for viewers", async () => {
@@ -93,8 +121,11 @@ describe("mcp executeTool", () => {
       }
     });
 
+    const viewerToken = await accessTokenFor(t, viewer);
+
     await expect(
-      viewer.mutation(api.mcp.executeTool, {
+      t.mutation(api.mcp.executeToolWithOAuthAccessToken, {
+        accessToken: viewerToken,
         name: "update_project_meta",
         args: { projectId, title: "Should fail" },
       })
@@ -105,15 +136,18 @@ describe("mcp executeTool", () => {
     const t = convexTest(schema, modules);
     const owner = t.withIdentity({ subject: "owner-user", issuer: "convex" });
     const projectId = await owner.mutation(api.projects.create, { title: "Audit MCP" });
+    const ownerToken = await accessTokenFor(t, owner);
 
     await expect(
-      owner.mutation(api.mcp.executeTool, {
+      t.mutation(api.mcp.executeToolWithOAuthAccessToken, {
+        accessToken: ownerToken,
         name: "update_project_meta",
         args: { projectId },
       })
     ).rejects.toThrow("MCP_ERROR:invalid_arguments");
 
-    await owner.mutation(api.mcp.executeTool, {
+    await t.mutation(api.mcp.executeToolWithOAuthAccessToken, {
+      accessToken: ownerToken,
       name: "update_project_meta",
       args: { projectId, venue: "Arena" },
     });

@@ -72,6 +72,22 @@ export default defineSchema({
     .index("by_clientId", ["clientId"])
     .index("by_user_and_revokedAt", ["userId", "revokedAt"]),
 
+  // Dynamically registered OAuth clients (RFC 7591). Public clients only — no secrets stored.
+  mcpOAuthClients: defineTable({
+    clientId: v.string(),
+    clientName: v.optional(v.string()),
+    redirectUris: v.array(v.string()),
+    tokenEndpointAuthMethod: v.literal("none"),
+    grantTypes: v.array(v.string()),
+    clientUri: v.optional(v.string()),
+    logoUri: v.optional(v.string()),
+    createdAt: v.number(),
+    // Set at registration and bumped on every authorization, so unused clients decay via cron.
+    lastUsedAt: v.optional(v.number()),
+  })
+    .index("by_clientId", ["clientId"])
+    .index("by_lastUsedAt", ["lastUsedAt"]),
+
   // OAuth authorization codes used by remote MCP clients (e.g. Claude) with PKCE.
   mcpOAuthAuthorizationCodes: defineTable({
     codeHash: v.string(),
@@ -79,8 +95,10 @@ export default defineSchema({
     clientId: v.string(),
     redirectUri: v.string(),
     codeChallenge: v.string(),
+    // "plain" remains only for pre-migration rows; runtime rejects it (OAuth 2.1 is S256-only).
     codeChallengeMethod: v.union(v.literal("S256"), v.literal("plain")),
     scope: v.optional(v.string()),
+    resource: v.optional(v.string()),
     createdAt: v.number(),
     expiresAt: v.number(),
     usedAt: v.optional(v.number()),
@@ -88,7 +106,8 @@ export default defineSchema({
   })
     .index("by_codeHash", ["codeHash"])
     .index("by_clientId", ["clientId"])
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    .index("by_expiresAt", ["expiresAt"]),
 
   // OAuth bearer access tokens issued from authorization code exchange.
   mcpOAuthAccessTokens: defineTable({
@@ -96,6 +115,7 @@ export default defineSchema({
     userId: v.string(),
     clientId: v.string(),
     scope: v.optional(v.string()),
+    resource: v.optional(v.string()),
     createdAt: v.number(),
     expiresAt: v.number(),
     revokedAt: v.optional(v.number()),
@@ -103,7 +123,25 @@ export default defineSchema({
   })
     .index("by_tokenHash", ["tokenHash"])
     .index("by_clientId", ["clientId"])
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    .index("by_user_and_clientId", ["userId", "clientId"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  // OAuth refresh tokens, rotated on every use (OAuth 2.1).
+  mcpOAuthRefreshTokens: defineTable({
+    tokenHash: v.string(),
+    userId: v.string(),
+    clientId: v.string(),
+    scope: v.optional(v.string()),
+    resource: v.optional(v.string()),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    rotatedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_user_and_clientId", ["userId", "clientId"])
+    .index("by_expiresAt", ["expiresAt"]),
 
   projectPresence: defineTable({
     projectId: v.id("projects"),

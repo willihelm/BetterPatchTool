@@ -76,63 +76,45 @@ bun run test:e2e
 
 Playwright uses `http://localhost:3000` and will start the Next.js dev server automatically if needed.
 
-## MCP v1 (MCP Editing)
+## MCP (Remote MCP Server with OAuth 2.1)
 
-This repo includes an MCP endpoint for AI agents:
+This repo includes a remote MCP server for AI agents:
 
-- Endpoint: `POST /api/mcp`
-- Transport: Streamable HTTP (JSON-RPC style MCP requests)
-- Auth:
-  - OAuth (GitHub) session or OAuth bearer token
-  - Client Credentials (`client_id` + `client_secret`) from app settings
+- Endpoint: `https://<your-app>/api/mcp`
+- Transport: Streamable HTTP (via [`mcp-handler`](https://github.com/vercel/mcp-handler))
+- Auth: OAuth 2.1 with Dynamic Client Registration, PKCE (S256), refresh tokens, and a consent screen. End-user identity is the existing GitHub login.
+
+### Connect from Claude
+
+1. In Claude (Desktop or web), open **Settings → Connectors → Add custom connector**.
+2. Paste `https://<your-app>/api/mcp`.
+3. Your browser opens: sign in with GitHub, then approve the consent screen. Done — no keys to copy.
+
+Authorized apps can be reviewed and revoked at `/settings/mcp-access` (Connected apps).
 
 ### Setup
 
 1. Configure GitHub OAuth on your Convex deployment (`AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`).
 2. Set `NEXT_PUBLIC_CONVEX_SITE_URL` on the same Convex deployment to `https://<your-deployment>.convex.site`.
-3. Set a pepper for hashing MCP client secrets:
+3. Set the canonical app origin for the Next.js app (used for the OAuth issuer, metadata, and `WWW-Authenticate` discovery):
    ```bash
-   bunx convex env set MCP_TOKEN_PEPPER "$(openssl rand -base64 32)"
+   # .env.local / hosting provider env
+   NEXT_PUBLIC_APP_URL=https://<your-app>
    ```
-   Use at least 32 bytes of cryptographically secure randomness for `MCP_TOKEN_PEPPER`.
-4. Sign in to BetterPatchTool via GitHub OAuth.
-5. Open `/settings/mcp-access` and create MCP client credentials for your MCP client (e.g. Claude Code).
-6. Call MCP either:
-   - with authenticated session (cookies) / OAuth bearer token, or
-   - with HTTP Basic auth using `client_id:client_secret`.
+4. Set the MCP resource URL on the Convex deployment (RFC 8707 token audience binding):
+   ```bash
+   bunx convex env set MCP_RESOURCE_URL https://<your-app>/api/mcp
+   ```
 
-### Claude Desktop example
-
-Use an MCP server entry that points to your running Next.js app and provide your generated credentials:
-Use HTTPS in production to protect Basic auth credentials in transit.
-
-```json
-{
-  "mcpServers": {
-    "betterpatchtool": {
-      "url": "http://localhost:3000/api/mcp",
-      "headers": {
-        "Authorization": "Basic <base64(client_id:client_secret)>"
-      }
-    }
-  }
-}
-```
-
-Generate the header value with:
+### Local development & testing
 
 ```bash
-echo -n "<client_id>:<client_secret>" | base64
+bunx convex dev   # backend
+bun dev           # Next.js on http://localhost:3000
 ```
 
-### cURL example (Basic auth)
-
-```bash
-curl -X POST http://localhost:3000/api/mcp \
-  -H "Content-Type: application/json" \
-  -u "<client_id>:<client_secret>" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
-```
+- Interactive inspector: `npx @modelcontextprotocol/inspector` against `http://localhost:3000/api/mcp` (exercises discovery → registration → login + consent → tools).
+- Full OAuth dance from a CLI client: `npx mcp-remote http://localhost:3000/api/mcp`.
 
 ### Tool allowlist
 
