@@ -114,9 +114,14 @@ const verifyToken = async (req: Request, bearerToken?: string): Promise<AuthInfo
   };
 };
 
+// The resource identifier must be the MCP endpoint URL (not the bare origin) so
+// it matches the protected-resource metadata and the Convex MCP_RESOURCE_URL
+// audience check. Keeping the `${origin}/api/mcp` shape identical across the 401
+// pointer, the well-known metadata, and the token audience prevents drift.
+const appOrigin = process.env.NEXT_PUBLIC_APP_URL;
 const authHandler = withMcpAuth(handler, verifyToken, {
   required: true,
-  resourceUrl: process.env.NEXT_PUBLIC_APP_URL,
+  resourceUrl: appOrigin ? `${appOrigin}/api/mcp` : undefined,
 });
 
 async function corsWrappedHandler(request: Request) {
